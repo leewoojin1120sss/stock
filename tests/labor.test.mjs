@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {LocalD1} from './db.mjs';
 import {accountFor} from '../lib/engine.ts';
 import {laborState,recordTap,LABOR_INTERVAL} from '../lib/labor.ts';
-const now=Date.parse('2026-10-19T15:30:00+09:00'),key=()=>crypto.randomUUID(),row=(db,sql,...values)=>db.sqlite.prepare(sql).get(...values);
+const now=Date.parse('2026-10-20T15:30:00+09:00'),key=()=>crypto.randomUUID(),row=(db,sql,...values)=>db.sqlite.prepare(sql).get(...values);
 async function setup(){const db=new LocalD1();await accountFor(db,'alice',now);await accountFor(db,'bob',now);return db;}
 async function fill(db,from,to){let result;for(let i=from;i<to;i++)result=await recordTap(db,'alice',{expectedTaps:i,requestKey:key()},now+i*LABOR_INTERVAL);return result;}
 test('100 accepted taps pay exactly 1000 into spendable cash and a settled ledger',async()=>{const db=await setup();assert.equal((await laborState(db,'alice')).progress,0);await fill(db,0,99);assert.equal((await laborState(db,'alice')).progress,99);assert.equal(row(db,"SELECT cash FROM accounts WHERE id='alice'").cash,10000000);const result=await fill(db,99,100);assert.equal(result.credited,1000);assert.equal(result.work.completed,1);assert.equal(result.work.progress,0);assert.equal(row(db,"SELECT cash FROM accounts WHERE id='alice'").cash,10001000);assert.deepEqual({...row(db,"SELECT amount,settled,kind FROM cash_events WHERE user_id='alice'")},{amount:1000,settled:1,kind:'노동 수당'});await fill(db,100,200);assert.equal(row(db,"SELECT cash FROM accounts WHERE id='alice'").cash,10002000);assert.equal((await laborState(db,'alice')).earned,2000);assert.equal((await laborState(db,'bob')).totalTaps,0);});

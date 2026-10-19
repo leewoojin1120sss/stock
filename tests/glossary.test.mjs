@@ -7,3 +7,5 @@ test('all canonical terms and aliases resolve to a concise definition',()=>{asse
 test('short price labels do not annotate unrelated Korean words in prose',()=>{const text='이 도시가 고가의 설비와 저가형 상품을 소개합니다.';assert.equal(splitTerms(text).filter(p=>p.entry).length,0);assert.equal(splitTerms('시가')[0].entry.term,'시가');assert.equal(splitTerms('고가')[0].entry.term,'고가');});
 test('signup and unrelated Korean words never expose embedded financial terms',()=>{const text='회원가입에서 아이디를 만들고 대체결제 안내와 최종가격을 확인하세요. 원가입력은 표시하지 마세요.';assert.equal(splitTerms(text).filter(p=>p.entry).length,0);assert.equal(splitTerms(text).map(p=>p.text).join(''),text);});
 test('complete financial compounds and normal Korean endings still get definitions',()=>{const text='매출원가는 생산원가와 달라요. 호가창에서 배당금을 보고 체결된 주문을 확인하세요.',terms=splitTerms(text).filter(p=>p.entry).map(p=>p.text);assert.deepEqual(terms,['매출원가','생산원가','호가창','배당금','체결']);});
+
+test('financial units and complete expense nouns retain their definitions in ordinary sentences',()=>{const parts=splitTerms('감가상각비와 금 트로이온스당 가격, 원유 배럴당 가격을 확인해요.');assert.deepEqual(parts.filter(p=>p.entry).map(p=>p.text),['감가상각비','트로이온스','배럴']);});

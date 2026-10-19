@@ -1,8 +1,8 @@
 name: Market heartbeat
 on:
   schedule:
-    # UTC 07:40–14:40 = KST 16:40–23:40; extra pings safely do nothing before opening.
-    - cron: '*/10 7-14 * * *'
+    # Server time gates auctions; editorial queues also publish while the exchange is closed.
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 permissions: {}
 concurrency:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Materialize due auctions
+      - name: Publish due market and editorial updates
         env:
           MARKET_URL: https://buseok-stock.artful-boar-9093.chatgpt.site/api/heartbeat
         run: |

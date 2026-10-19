@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {LocalD1} from './db.mjs';
 import {hashPassword,verifyPassword,register,authenticate,newSession,sessionUser,logout,changePassword,rateLimit,sameOrigin,COOKIE} from '../lib/auth.ts';
-const now=Date.parse('2026-10-19T05:00:00Z'),body={login:'Trader_01',password:'my-test-password-1947',nickname:'새 투자자'};
+const now=Date.parse('2026-10-20T05:00:00Z'),body={login:'Trader_01',password:'my-test-password-1947',nickname:'새 투자자'};
 const req=cookie=>new Request('https://stock.test/api/game',{headers:{Cookie:cookie}});
 test('salted memory-hard password hashes verify without storing plaintext',async()=>{const a=await hashPassword(body.password),b=await hashPassword(body.password);assert.notEqual(a,b);assert.ok(!a.includes(body.password));assert.equal(await verifyPassword(body.password,a),true);assert.equal(await verifyPassword('wrong-password',a),false);});
 test('registration creates one funded account and enforces normalized ID uniqueness atomically',async()=>{const db=new LocalD1(),user=await register(db,body,now);assert.equal(user.login,'trader_01');assert.equal(user.nickname,body.nickname);assert.equal(db.sqlite.prepare('SELECT cash FROM accounts').get().cash,10000000);await assert.rejects(register(db,{...body,login:'TRADER_01'},now),/사용 중/);assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM accounts').get().n,1);await assert.rejects(register(db,{...body,login:'bad id'},now));await assert.rejects(register(db,{...body,password:'short'},now));});
