@@ -1,0 +1,1 @@
+ALTER TABLE `market` ADD `seed` text DEFAULT '' NOT NULL;
