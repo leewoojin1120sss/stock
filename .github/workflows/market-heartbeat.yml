@@ -1,0 +1,26 @@
+name: Market heartbeat
+on:
+  schedule:
+    # UTC 07:40–14:40 = KST 16:40–23:40; extra pings safely do nothing before opening.
+    - cron: '*/10 7-14 * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: market-heartbeat
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Materialize due auctions
+        env:
+          MARKET_URL: https://buseok-stock.artful-boar-9093.chatgpt.site/api/heartbeat
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8; do
+            response=$(curl --fail --silent --show-error --max-time 30 --retry 2 "$MARKET_URL")
+            echo "$response"
+            if ! echo "$response" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("syncing") else 1)'; then
+              break
+            fi
+          done
