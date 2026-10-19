@@ -22,6 +22,7 @@ export async function POST(request:Request){
   if(!input||typeof input!=='object')return response({error:'입력을 확인해주세요.'},400);
   const now=Date.now();if(await advanceMarket(env.DB,now))return response({error:'이전 시세를 정산 중입니다. 잠시 후 다시 주문해주세요.'},409);
   await accountFor(env.DB,user.userId,now);
+  if(input.action==='tutorial'){await env.DB.prepare('UPDATE accounts SET tutorial_done=1 WHERE id=?').bind(user.userId).run();return response({ok:true});}
   if(input.action==='order')return response(await placeOrder(env.DB,user.userId,input,Date.now()));
   if(input.action==='cancel')return response(await cancelOrder(env.DB,user.userId,input.id));
   if(input.action==='nickname'){
