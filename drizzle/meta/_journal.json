@@ -36,6 +36,13 @@
       "when": 1792391577015,
       "tag": "0004_zippy_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792392598972,
+      "tag": "0005_young_mindworm",
+      "breakpoints": true
     }
   ]
 }
