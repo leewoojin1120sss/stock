@@ -2,7 +2,7 @@ import {createHmac} from 'node:crypto';
 import {companyProfile} from './company-profile.ts';
 import {rateLimit} from './auth.ts';
 import {random,session,type Row,type Stock,DAY} from './market-data.ts';
-export const RESEARCH_COST=30000,RESEARCH_DURATION=DAY;
+export const RESEARCH_COST=300000,RESEARCH_DURATION=DAY;
 const q=(db:D1Database,sql:string,args:unknown[]=[])=>db.prepare(sql).bind(...args);
 const put=(db:D1Database,table:string,row:Row)=>{const keys=Object.keys(row);return q(db,`INSERT OR IGNORE INTO ${table}(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`,Object.values(row));};
 export function companyRelease(stock:Stock,ts:number){const p=companyProfile(stock);return{id:'company-ir-'+stock.id,ts,stock_id:stock.id,sector:stock.sector,title:stock.name+' | '+p.slogan,body:p.promise,impact:0,expires:ts+DAY*365,category:'기업소식',details:JSON.stringify({source:stock.name+' IR',paragraphs:[p.promise,stock.description,p.products.map(([name,desc])=>name+': '+desc).join(' · ')],metrics:stock.kind==='stock'?[['주요 사업',stock.company_type],['사업 거점',p.location],['해외 매출',(stock.export_ratio*100).toFixed(1)+'%']]:[['상품 유형',stock.company_type],['연간 운용 비용',(stock.annual_fee*100).toFixed(2)+'%'],['순자산가치',stock.nav.toFixed(2)+'원']],focus:p.strengths})};}

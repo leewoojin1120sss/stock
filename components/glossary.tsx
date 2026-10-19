@@ -1,0 +1,10 @@
+'use client';
+import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
+import {BookOpen,X} from 'lucide-react';
+import {splitTerms,type GlossaryEntry} from '../lib/glossary';
+const GlossaryContext=createContext<(entry:GlossaryEntry,button:HTMLButtonElement)=>void>(()=>{});
+export function TermText({children}:{children:string}){const open=useContext(GlossaryContext);return <>{splitTerms(children).map((part,i)=>part.entry?<button type="button" key={i} className="glossary-term" aria-haspopup="dialog" aria-label={part.text+' 뜻 보기'} onClick={e=>{e.preventDefault();e.stopPropagation();open(part.entry!,e.currentTarget)}}>{part.text}</button>:part.text)}</>}
+export function GlossaryProvider({children}:{children:ReactNode}){const[entry,setEntry]=useState<GlossaryEntry|null>(null),dialog=useRef<HTMLElement>(null),origin=useRef<HTMLButtonElement|null>(null);function close(){setEntry(null);if(origin.current?.isConnected)origin.current.focus()}
+ useEffect(()=>{if(!entry)return;dialog.current?.focus();const handler=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();close()}if(e.key==='Tab'){e.preventDefault();dialog.current?.querySelector<HTMLButtonElement>('button')?.focus()}};document.addEventListener('keydown',handler,true);return()=>document.removeEventListener('keydown',handler,true)},[entry]);
+ return <GlossaryContext.Provider value={(value,button)=>{origin.current=button;setEntry(value)}}>{children}{entry&&<div className="glossary-backdrop" onClick={e=>{e.stopPropagation();close()}}><section className="glossary-dialog" role="dialog" aria-modal="true" aria-labelledby="glossary-title" aria-describedby="glossary-meaning" ref={dialog} tabIndex={-1} onClick={e=>e.stopPropagation()}><div className="glossary-heading"><span><BookOpen size={16}/> 용어 사전</span><button type="button" onClick={close} aria-label="용어 설명 닫기"><X size={20}/></button></div><h2 id="glossary-title">{entry.term}</h2><p id="glossary-meaning">{entry.meaning}</p>{entry.example&&<div className="glossary-example">{entry.example}</div>}</section></div>}</GlossaryContext.Provider>
+}

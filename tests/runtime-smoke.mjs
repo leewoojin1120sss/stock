@@ -8,7 +8,7 @@ const require=createRequire(import.meta.url),workerRequire=createRequire(require
 const {build}=await import(pathToFileURL(workerRequire.resolve('esbuild')).href),{Miniflare}=await import(pathToFileURL(workerRequire.resolve('miniflare')).href);
 const root=resolve(import.meta.dirname,'..'),runtime=resolve(root,'.sites-runtime/api-smoke');mkdirSync(runtime,{recursive:true});
 const entry=resolve(runtime,'entry.ts'),output=resolve(runtime,'worker.mjs');
-writeFileSync(entry,`import * as auth from '${root}/app/api/auth/route.ts';import * as game from '${root}/app/api/game/route.ts';import * as information from '${root}/app/api/information/route.ts';import * as article from '${root}/app/api/article/route.ts';const nativeNow=Date.now;let clock;Date.now=()=>clock??nativeNow();export default{async fetch(request){const t=request.headers.get('x-smoke-now');if(t)clock=Number(t);const route={'/api/auth':auth,'/api/game':game,'/api/information':information,'/api/article':article}[new URL(request.url).pathname];return request.method==='POST'?route.POST(request):route.GET(request)}};`);
+writeFileSync(entry,`import * as auth from '${root}/app/api/auth/route.ts';import * as game from '${root}/app/api/game/route.ts';import * as information from '${root}/app/api/information/route.ts';import * as article from '${root}/app/api/article/route.ts';import * as work from '${root}/app/api/work/route.ts';const nativeNow=Date.now;let clock;Date.now=()=>clock??nativeNow();export default{async fetch(request){const t=request.headers.get('x-smoke-now');if(t)clock=Number(t);const route={'/api/auth':auth,'/api/game':game,'/api/information':information,'/api/article':article,'/api/work':work}[new URL(request.url).pathname];return request.method==='POST'?route.POST(request):route.GET(request)}};`);
 await build({entryPoints:[entry],outfile:output,bundle:true,format:'esm',platform:'neutral',external:['node:*','cloudflare:*'],target:'es2022'});
 const mf=new Miniflare({modules:true,scriptPath:output,compatibilityDate:'2026-05-15',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],cf:false});
 try{
@@ -27,16 +27,23 @@ try{
  const report=info.json.reports[0];assert.equal((await call('/api/information?report='+report.id)).status,401);assert.equal((await call('/api/information?report='+report.id,null,registered.cookie)).status,403);
  const beforeCash=filled.json.account.cash,key=crypto.randomUUID();
  const purchase=await call('/api/information',{action:'subscribe',requestKey:key},registered.cookie);assert.equal(purchase.status,200,JSON.stringify(purchase.json));assert.equal(purchase.json.active,true);
- assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-30000);
- const retry=await call('/api/information',{action:'subscribe',requestKey:key},registered.cookie);assert.equal(retry.status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-30000);
+ assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-300000);
+ const retry=await call('/api/information',{action:'subscribe',requestKey:key},registered.cookie);assert.equal(retry.status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-300000);
  const full=await call('/api/information?report='+report.id,null,registered.cookie);assert.equal(full.status,200);assert.ok(full.json.body.sections.length>=4);assert.ok(full.json.body.sources.length);
  const source=await call('/api/article?id='+encodeURIComponent(full.json.body.sources[0].id));assert.equal(source.status,200);assert.ok(!Object.hasOwn(source.json,'impact'));assert.ok(!Object.hasOwn(source.json.details,'financialUpdate'));
  const post=await call('/api/information',{action:'post',stockId:'000001',title:'런타임에서 올린 제보',body:'원문이 있는지 확인하고 싶은 커뮤니티 글입니다.'},registered.cookie);assert.equal(post.status,200,JSON.stringify(post.json));
  const own=(await call('/api/information',null,registered.cookie)).json.posts.find(p=>p.own);assert.ok(own);assert.equal(own.author,'수정한 투자자');assert.equal((await call('/api/information',{action:'delete',id:own.id},registered.cookie)).status,200);
  assert.equal((await call('/api/game',{action:'tutorial'},registered.cookie)).status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account.tutorial_done,1);
+ const workStart=await call('/api/work',null,registered.cookie);assert.equal(workStart.status,200);assert.equal(workStart.json.work.totalTaps,0);assert.equal((await call('/api/work')).status,401);
+ const skipped=await call('/api/work',{expectedTaps:100,requestKey:crypto.randomUUID(),reward:1000000},registered.cookie);assert.equal(skipped.status,409);assert.equal(skipped.json.work.totalTaps,0);
+ const wageCash=(await call('/api/game',null,registered.cookie)).json.account.cash;let finalTap,lastWorkKey;
+ for(let i=0;i<100;i++){lastWorkKey=crypto.randomUUID();finalTap=await call('/api/work',{expectedTaps:i,requestKey:lastWorkKey},registered.cookie,open+600000+i*80);assert.equal(finalTap.status,200,JSON.stringify(finalTap.json));}
+ assert.equal(finalTap.json.credited,1000);assert.equal(finalTap.json.work.completed,1);assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,wageCash+1000);
+ const workRetry=await call('/api/work',{expectedTaps:99,requestKey:lastWorkKey},registered.cookie);assert.equal(workRetry.status,200);assert.equal(workRetry.json.duplicate,true);assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,wageCash+1000);
+ const forged=await mf.dispatchFetch('https://stock.test/api/work',{method:'POST',headers:{Origin:'https://other.test','Content-Type':'application/json',Cookie:registered.cookie},body:JSON.stringify({expectedTaps:100,requestKey:crypto.randomUUID()})});assert.equal(forged.status,403);
  const loggedout=await call('/api/auth',{action:'logout'},registered.cookie);assert.equal(loggedout.status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account,null);
  const signedin=await call('/api/auth',{action:'login',login:input.login,password:input.password});assert.equal(signedin.status,200);assert.ok((await call('/api/game',null,signedin.cookie)).json.account);
  const forbidden=await call('/api/game',{action:'watch',stockId:'000001',enabled:true});assert.equal(forbidden.status,401);
  const payload=JSON.stringify(me.json);assert.ok(!payload.includes('password_hash'));assert.ok(!payload.includes('"impact"'));assert.ok(!payload.includes('"seed"'));
- console.log('Workers API smoke passed: authentication, D1 trade settlement, tutorial, community, subscription debit/idempotency, paid article gate and public sources.');
+ console.log('Workers API smoke passed: authentication, D1 trade settlement, tutorial, community, subscription debit/idempotency, paid article gate, glossary sources and 100-tap labor wages.');
 }finally{await mf.dispose();}

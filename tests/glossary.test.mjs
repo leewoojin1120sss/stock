@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {splitTerms,glossary} from '../lib/glossary.ts';
+test('glossary matches Korean particles, English abbreviations and the longest alias without changing text',()=>{const text='EPS는 2,000원, PER은 10배. 배당락과 미수 배당금을 비교하고 추정 순자산가치(NAV)를 봅니다.',parts=splitTerms(text);assert.equal(parts.map(p=>p.text).join(''),text);assert.deepEqual(parts.filter(p=>p.entry).map(p=>p.text),['EPS','PER','배당락','미수 배당금','추정 순자산가치','NAV']);});
+test('English substrings inside product names stay intact while lowercase terms are recognized',()=>{const parts=splitTerms('NAVIGATE PERCENT SHIPPING | etf · vwap / ROE');assert.deepEqual(parts.filter(p=>p.entry).map(p=>p.entry.term),['ETF','VWAP','ROE']);assert.equal(splitTerms('일반 문장입니다.')[0].text,'일반 문장입니다.');});
+test('all canonical terms and aliases resolve to a concise definition',()=>{assert.ok(glossary.length>=50);for(const entry of glossary)for(const term of[entry.term,...entry.aliases||[]]){const parts=splitTerms(term);assert.equal(parts.length,1);assert.equal(parts[0].entry.term,entry.term);assert.ok(entry.meaning.length>15);}});
+test('short price labels do not annotate unrelated Korean words in prose',()=>{const text='이 도시가 고가의 설비와 저가형 상품을 소개합니다.';assert.equal(splitTerms(text).filter(p=>p.entry).length,0);assert.equal(splitTerms('시가')[0].entry.term,'시가');assert.equal(splitTerms('고가')[0].entry.term,'고가');});
