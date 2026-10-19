@@ -1,0 +1,7 @@
+DROP TRIGGER research_purchase_validate;
+--> statement-breakpoint
+CREATE TRIGGER research_purchase_validate BEFORE INSERT ON research_purchases BEGIN
+ SELECT CASE WHEN NEW.cost!=500000 OR NEW.expires!=NEW.created+86400000 THEN RAISE(ABORT,'INVALID_SUBSCRIPTION') END;
+ SELECT CASE WHEN COALESCE((SELECT expires FROM subscriptions WHERE user_id=NEW.user_id),0)>NEW.created THEN RAISE(ABORT,'SUBSCRIPTION_ACTIVE') END;
+ SELECT CASE WHEN COALESCE((SELECT cash FROM accounts WHERE id=NEW.user_id),0)<NEW.cost THEN RAISE(ABORT,'SUBSCRIPTION_FUNDS') END;
+END;

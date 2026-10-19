@@ -43,6 +43,13 @@
       "when": 1792392598972,
       "tag": "0005_young_mindworm",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792396416264,
+      "tag": "0006_research_price",
+      "breakpoints": true
     }
   ]
 }

@@ -21,7 +21,7 @@ export const glossary:GlossaryEntry[]=[
  {term:'배당수익률',meaning:'주당 배당금을 주가로 나눈 비율입니다. 이 화면에서 회당으로 표시된 배당금은 한 번 지급하는 금액을 뜻합니다.'},
  {term:'배당락',meaning:'해당 회차의 배당을 받을 권리가 빠지는 시점입니다. 이 시장에서는 권리 확정 회차의 주문 체결 직전 보유량을 기준으로 배당을 정하고, 기준 가격을 조정합니다.'},
  {term:'미수 배당금',meaning:'받을 권리는 확정됐지만 아직 지급되지 않은 배당금입니다. 지급 시각이 되면 계좌 잔액으로 들어옵니다.'},
- {term:'배당',meaning:'기업이 이익 등의 일부를 주주에게 나누어 지급하는 금액입니다. 종목마다 지급 여부·금액·일정이 다릅니다.'},
+ {term:'배당',aliases:['배당금'],meaning:'회사가 번 돈 중 일부를 주식을 가진 사람에게 나누어 주는 돈이에요. 회사마다 금액과 주는 날짜가 달라요.'},
  {term:'단일가',meaning:'일정 시간 모인 주문을 한 시점에 하나의 가격으로 체결하는 방식입니다. 이 시장은 10분마다 주문을 모아 체결합니다.'},
  {term:'시장가',meaning:'가격을 지정하지 않고 체결을 우선하는 주문입니다. 이 시장에서는 다음 단일가에 참여하며, 잔량은 다음 회차로 넘어갈 수 있습니다.'},
  {term:'지정가',meaning:'매수할 최대 가격이나 매도할 최소 가격을 직접 정하는 주문입니다. 조건에 맞지 않으면 체결되지 않습니다.'},
@@ -41,7 +41,7 @@ export const glossary:GlossaryEntry[]=[
  {term:'수수료',meaning:'매매 등의 서비스를 이용할 때 내는 비용입니다. 이 시장에서는 매수·매도 체결마다 거래금액의 0.1%를 적용합니다.'},
  {term:'실현 손익',aliases:['실현손익'],meaning:'주식을 매도해 확정한 이익이나 손실입니다. 보유 중 가격 변동에 따른 평가손익과 구분합니다.'},
  {term:'평가손익',aliases:['평가 손익'],meaning:'보유 자산의 현재 평가금액과 매입에 든 금액의 차이입니다. 매도 전에는 가격에 따라 달라집니다.'},
- {term:'주문 확보금',aliases:['확보할 주문 금액'],meaning:'매수 주문을 체결할 수 있도록 계좌에서 따로 묶어 둔 돈입니다. 체결 후 남은 차액이나 취소한 주문의 금액은 다시 사용할 수 있습니다.'},
+ {term:'주문 확보금',aliases:['확보할 주문 금액','주문확보금'],meaning:'주식을 살 때 쓸 수 있도록 잠시 따로 묶어 둔 돈이에요. 실제로 주식을 산 뒤 남은 돈이나, 주문을 취소한 돈은 다시 쓸 수 있어요.'},
  {term:'포트폴리오',meaning:'투자자가 보유한 주식·ETF·현금 등 자산의 전체 구성입니다.'},
  {term:'차입',meaning:'이자를 지급하는 등의 조건으로 외부에서 돈을 빌리는 것입니다.'},
  {term:'차환',meaning:'기존 빚을 갚기 위해 새로운 자금을 빌리는 것입니다. 새 금리와 만기 조건이 중요합니다.'},
@@ -58,8 +58,11 @@ export const glossary:GlossaryEntry[]=[
  {term:'현금흐름',meaning:'일정 기간 기업에 실제로 들어오고 나간 현금의 흐름입니다. 회계상 이익과 일치하지 않을 수 있습니다.'},
  {term:'영업이익',meaning:'매출에서 매출원가와 판매·관리 비용 등을 빼고 남은 본업의 이익입니다.'},
  {term:'순이익',meaning:'영업 활동 외의 손익과 세금 등을 반영하고 최종적으로 남은 이익입니다.'},
- {term:'매출',meaning:'제품이나 서비스를 판매해 얻은 수익입니다. 비용을 빼기 전의 금액입니다.'},
- {term:'원가',meaning:'제품을 만들거나 서비스를 제공하는 데 들어간 비용입니다.'},
+ {term:'매출',aliases:['매출액','총매출'],meaning:'물건이나 서비스를 팔아서 번 돈 전체예요. 물건을 만드는 비용 등을 빼기 전 금액이에요.'},
+ {term:'원가',aliases:['생산원가','제조원가','제품원가'],meaning:'물건을 만들거나 서비스를 제공하는 데 들어간 돈이에요.'},
+ {term:'매출원가',meaning:'판매한 물건을 만들거나 들여오는 데 든 돈이에요. 물건을 판 금액인 매출과 구분해요.'},
+ {term:'호가창',meaning:'사람들이 얼마에 몇 주를 사거나 팔겠다고 신청했는지 모아 보여 주는 표예요. 아직 실제 거래가 끝난 수량을 뜻하지는 않아요.'},
+ {term:'영업현금흐름',meaning:'회사가 물건을 팔거나 서비스를 제공하는 본업을 하면서 실제로 들어오고 나간 돈의 흐름이에요.'},
  {term:'상한가',meaning:'해당 거래일에 주문·거래할 수 있는 가격의 상단입니다. 기준 가격과 상품별 가격 제한으로 계산합니다.'},
  {term:'하한가',meaning:'해당 거래일에 주문·거래할 수 있는 가격의 하단입니다. 기준 가격과 상품별 가격 제한으로 계산합니다.'},
  {term:'거래대금',meaning:'실제로 거래된 가격에 수량을 곱한 금액을 모두 더한 값입니다.'},
@@ -80,4 +83,5 @@ export const glossary:GlossaryEntry[]=[
 ];
 const lookup=new Map<string,GlossaryEntry>();for(const entry of glossary)for(const name of[entry.term,...entry.aliases||[]])lookup.set(name.toLowerCase(),entry);
 const pattern=[...lookup.keys()].sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
-export function splitTerms(text:string){const result:{text:string;entry?:GlossaryEntry}[]=[],regex=new RegExp(pattern,'gi');let cursor=0;for(const match of text.matchAll(regex)){const start=match.index!,word=match[0],entry=lookup.get(word.toLowerCase())!;if(entry.exact&&text!==word)continue;if(/^[a-z]+$/i.test(word)&&(/[a-z]/i.test(text[start-1]||'')||/[a-z]/i.test(text[start+word.length]||'')))continue;if(start>cursor)result.push({text:text.slice(cursor,start)});result.push({text:word,entry});cursor=start+word.length;}if(cursor<text.length)result.push({text:text.slice(cursor)});return result;}
+const koreanEnding=/^(?:(?:은|는|이|가|을|를|의|에|와|과|도|만|로|으로|부터|까지|보다|처럼|마다|에게|에서|에다가|랑|이랑|뿐|만큼|된|될|되는|되면|되어|되고|됐어요|됩니다|되었습니다|돼요|하며|하고|하는|합니다|이에요|예요|입니다|이라고|이라|인지|인가요|이라는|이란|이라서|이니까|인데|인데요|이라면|라면|일까요|일까|일|인)(?:은|는|도|만|요)?)?$/;
+export function splitTerms(text:string){const result:{text:string;entry?:GlossaryEntry}[]=[],regex=new RegExp(pattern,'gi');let cursor=0;for(const match of text.matchAll(regex)){const start=match.index!,word=match[0],entry=lookup.get(word.toLowerCase())!,next=text[start+word.length]||'';if(entry.exact&&text!==word)continue;if(/^[a-z]+$/i.test(word)&&(/[a-z]/i.test(text[start-1]||'')||/[a-z]/i.test(next)))continue;if(/[가-힣]/.test(word)){if(/\p{L}/u.test(text[start-1]||''))continue;const suffix=/^[가-힣]+/.exec(text.slice(start+word.length))?.[0]||'';if(!koreanEnding.test(suffix)||(!suffix&&/\p{L}/u.test(next)))continue;}if(start>cursor)result.push({text:text.slice(cursor,start)});result.push({text:word,entry});cursor=start+word.length;}if(cursor<text.length)result.push({text:text.slice(cursor)});return result;}

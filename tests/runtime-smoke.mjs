@@ -27,8 +27,8 @@ try{
  const report=info.json.reports[0];assert.equal((await call('/api/information?report='+report.id)).status,401);assert.equal((await call('/api/information?report='+report.id,null,registered.cookie)).status,403);
  const beforeCash=filled.json.account.cash,key=crypto.randomUUID();
  const purchase=await call('/api/information',{action:'subscribe',requestKey:key},registered.cookie);assert.equal(purchase.status,200,JSON.stringify(purchase.json));assert.equal(purchase.json.active,true);
- assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-300000);
- const retry=await call('/api/information',{action:'subscribe',requestKey:key},registered.cookie);assert.equal(retry.status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-300000);
+ assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-500000);
+ const retry=await call('/api/information',{action:'subscribe',requestKey:key},registered.cookie);assert.equal(retry.status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-500000);
  const full=await call('/api/information?report='+report.id,null,registered.cookie);assert.equal(full.status,200);assert.ok(full.json.body.sections.length>=4);assert.ok(full.json.body.sources.length);
  const source=await call('/api/article?id='+encodeURIComponent(full.json.body.sources[0].id));assert.equal(source.status,200);assert.ok(!Object.hasOwn(source.json,'impact'));assert.ok(!Object.hasOwn(source.json.details,'financialUpdate'));
  const post=await call('/api/information',{action:'post',stockId:'000001',title:'런타임에서 올린 제보',body:'원문이 있는지 확인하고 싶은 커뮤니티 글입니다.'},registered.cookie);assert.equal(post.status,200,JSON.stringify(post.json));
