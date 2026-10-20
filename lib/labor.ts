@@ -13,3 +13,22 @@ export async function recordTap(db:D1Database,userId:string,input:Record<string,
  if(!changed){if(state.taps===Number(expected)+1&&state.last_key===key)return{ok:true,duplicate:true,credited:0,work};if(capped||work.limitReached)return{ok:false,limitReached:true,credited:0,work};if(state.taps!==expected||state.last_key===key)return{ok:false,conflict:true,credited:0,work};return{ok:false,retryAfter:Math.max(1,state.updated+LABOR_INTERVAL-now),credited:0,work};}
  return{ok:true,duplicate:false,credited:(Number(expected)+1)%LABOR_TARGET===0?LABOR_REWARD:0,work};
 }
+// One HTTP round trip can acknowledge several physical taps. Each increment
+// still passes the existing SQL counter, pacing, daily cap and wage triggers.
+export async function recordTaps(db:D1Database,userId:string,input:Record<string,unknown>,now:number){
+ const expected=Number(input.expectedTaps),count=Number(input.count),key=input.requestKey;
+ if(!Number.isSafeInteger(input.expectedTaps)||expected<0||expected>Number.MAX_SAFE_INTEGER-100||!Number.isInteger(input.count)||count<1||count>20||typeof key!=='string'||!/^[a-zA-Z0-9-]{16,64}$/.test(key))throw Error('터치 진행 상태를 확인해주세요.');
+ const initial=await read(db,userId,now),work=view(initial,now),already=initial.taps-expected;
+ if(already>0&&already<=count&&initial.last_key===key+'-'+already)return{ok:true,duplicate:true,accepted:already,credited:0,work};
+ if(initial.taps!==expected)return{ok:false,conflict:true,accepted:0,credited:0,work};
+ if(work.limitReached)return{ok:false,limitReached:true,accepted:0,credited:0,work};
+ const allowed=Math.min(count,Math.max(0,Math.floor((now-initial.updated)/LABOR_INTERVAL)),LABOR_TARGET-work.progress);
+ if(!allowed)return{ok:false,retryAfter:Math.max(1,initial.updated+LABOR_INTERVAL-now),accepted:0,credited:0,work};
+ let accepted=0,credited=0;
+ for(let i=0;i<allowed;i++){
+  const result=await recordTap(db,userId,{expectedTaps:expected+i,requestKey:key+'-'+(i+1)},now-(allowed-1-i)*LABOR_INTERVAL);
+  if(!result.ok)return{...result,accepted,credited,work:await laborState(db,userId,now)};
+  accepted++;credited+=result.credited;
+ }
+ return{ok:true,duplicate:false,accepted,credited,work:await laborState(db,userId,now)};
+}
