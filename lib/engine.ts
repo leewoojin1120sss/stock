@@ -1,10 +1,11 @@
 import {createHmac,randomBytes} from 'node:crypto';
 /* Shared server-clock auction engine. All account money is integer KRW. */
-import {marketInterval,auctionsInSession,STEP,DAY,INITIAL_CASH,FEE,random,session,nextTick,isOpen,fee,tickSize,roundPrice,priceBounds,reserveFor,seedStocks,isEquity,macroAt,dividendDates,exDividend,economicCalendar,type Row,type Stock,type Macro} from './market-data.ts';
+import {marketInterval,auctionsInSession,STEP,DAY,INITIAL_CASH,FEE,random,marketRandom,session,nextTick,isOpen,fee,tickSize,roundPrice,priceBounds,reserveFor,seedStocks,isEquity,macroAt,dividendDates,exDividend,economicCalendar,type Row,type Stock,type Macro} from './market-data.ts';
 import {makeNews} from './news.ts';
 import {ensureInformation,informationSnapshot} from './information.ts';
 import {resetGameIfNeeded,RESET_VERSION} from './game-reset.ts';
 import {publicArticle} from './editorial.ts';
+import {marketCycle,cycleMove,cycleArticles,type MarketCycle} from './market-cycle.ts';
 export {STEP,DAY,INITIAL_CASH,FEE,random,session,nextTick,isOpen,fee,tickSize,roundPrice,priceBounds,reserveFor,seedStocks,makeNews};
 export type {Stock,Row};
 const statement=(db:D1Database,sql:string,values:any[]=[])=>db.prepare(sql).bind(...values);
@@ -31,14 +32,15 @@ export async function ensureCatalog(db:D1Database,now:number){
  commands.unshift(statement(db,'UPDATE market SET catalog_version=2,revision=CASE WHEN revision=? THEN revision+1 ELSE -1 END WHERE id=1',[market.revision]));
  try{await db.batch(commands);}catch(e){const current=await db.prepare('SELECT catalog_version FROM market WHERE id=1').first<Row>();if(!current||current.catalog_version<2)throw e;}
 }
-export function calculateTick(stocks:Stock[],queued:Row[],activeNews:Row[],ts:number,macro:Macro={rate:3,fx:1340,oil:78,gold:2700},lastMacro:Macro=macro,seed=''){
- const rng=(key:string|number)=>random(seed+key);
- const ratio=marketInterval(ts)/STEP,scale=Math.sqrt(ratio),opening=ts===session(ts).open,eq=stocks.filter(isEquity),marketNoise=(rng(ts+'macro')-.5)*.014*scale,fx=macro.fx/lastMacro.fx-1,oil=macro.oil/lastMacro.oil-1,rate=macro.rate-lastMacro.rate;
+export function calculateTick(stocks:Stock[],queued:Row[],activeNews:Row[],ts:number,macro:Macro={rate:3,fx:1340,oil:78,gold:2700},lastMacro:Macro=macro,seed='',cycle:MarketCycle|null=null){
+ const rng=(key:string|number)=>marketRandom(seed+key);
+ const ratio=marketInterval(ts)/STEP,scale=Math.sqrt(ratio),opening=ts===session(ts).open,eq=stocks.filter(isEquity),marketNoise=(rng(ts+'macro')-.5)*.008*scale,fx=macro.fx/lastMacro.fx-1,oil=macro.oil/lastMacro.oil-1,rate=macro.rate-lastMacro.rate;
  const next=eq.map(s=>{
   const demand=queued.filter(o=>o.stock_id===s.id).reduce((v,o)=>v+(o.side==='buy'?1:-1)*(o.qty-(o.filled_qty||0))*s.price,0),flow=Math.tanh(demand/(s.price*3000))*.009;
-  const newsImpact=activeNews.filter(n=>n.ts<=ts&&n.expires>=ts).reduce((v,n)=>v+(n.stock_id===s.id?n.impact:n.sector===s.sector?n.impact*.24:0)*Math.max(0,(n.expires-ts)/(STEP*6))*ratio,0);
+  const auctions=auctionsInSession(ts);
+  const newsImpact=activeNews.filter(n=>n.ts<=ts&&n.expires>=ts).reduce((v,n)=>{const age=ts-n.ts,weight=n.stock_id===s.id?1:n.sector===s.sector?.24:0,burst=Math.max(0,1-age/(STEP*6))*ratio,tail=['실적','수주·계약','실적 전망'].includes(n.category)?.12*Math.exp(-age/(DAY*.8))/auctions:0;return v+n.impact*weight*(burst+tail)},0);
   const oilExposure=s.sector==='에너지'?.35:['운송','물류','식품','이차전지'].includes(s.sector)?-.5:0,rateExposure=s.sector==='부동산'?-.012:s.company_type==='은행 금융지주'?.003:-.004;
-  const tradingSession=session(ts),auctions=auctionsInSession(ts);
+  const tradingSession=session(ts);
   // Rebuild distributable value throughout the session rather than only subtracting it at ex-date.
   const schedule=dividendDates(s,ts),payments=s.company_type.includes('리츠')&&!tradingSession.special?2:1;
   const dividendCarry=schedule?schedule.dps*payments/Math.max(1,s.price)/auctions:0;
@@ -46,7 +48,7 @@ export function calculateTick(stocks:Stock[],queued:Row[],activeNews:Row[],ts:nu
   const logMove=marketNoise*s.beta+(rng(ts+s.sector)-.5)*.013*scale+(rng(ts+s.id)-.5)*.023*s.beta*scale+shock+flow+newsImpact+fx*(s.export_ratio*.5-(['운송','유통'].includes(s.sector)?.5:.1))+oil*oilExposure+rate*rateExposure;
   // Symmetric log moves avoid the compounding loss of symmetric percentage moves.
   // Small growth is a market-wide tendency; no individual holding has a promised return.
-  const change=Math.expm1(logMove+.0004/auctions+dividendCarry);
+  const change=Math.expm1(logMove+(cycle?cycleMove(s,cycle,ts,auctions):.0004/auctions)+dividendCarry);
   const dividend=exDividend(s,ts),previous=roundPrice(Math.max(1,(opening?s.price:s.previous)-dividend),s.kind),reference=roundPrice(Math.max(1,s.price-dividend),s.kind),{lower,upper}=priceBounds(previous,s.kind),price=Math.max(lower,Math.min(upper,roundPrice(reference*(1+change),s.kind)));
   const report=activeNews.find(n=>n.ts===ts&&n.stock_id===s.id&&n.category==='실적'),update=report?JSON.parse(report.details||'{}').financialUpdate:null,eps=update?.eps??s.eps,revenue=update?.revenue??s.revenue;
   return{...s,eps,revenue,price,previous,day_open:opening?price:s.day_open,high:opening?price:Math.max(s.high,price),low:opening?price:Math.min(s.low,price),volume:opening?0:s.volume,turnover:opening?0:s.turnover,net_flow:opening?0:s.net_flow,pe:eps>0?Math.round(price/eps*100)/100:0,dividend:s.payout/price*100};
@@ -74,7 +76,8 @@ export async function advanceMarket(db:D1Database,now:number,maxSteps=4){
   const m=await db.prepare('SELECT * FROM market WHERE id=1').first<Row>();if(!m)throw Error('MARKET_MISSING');const ts=nextTick(m.last_tick);if(ts>now)return false;
   const [sr,or,nr,last]=await Promise.all([db.prepare('SELECT * FROM stocks WHERE active=1 ORDER BY id').all<Stock>(),statement(db,"SELECT rowid AS sequence,* FROM orders WHERE status IN ('open','partial') AND created<? ORDER BY created,rowid",[ts]).all<Row>(),statement(db,'SELECT * FROM news WHERE expires>=? AND ts<=?',[ts,ts]).all<Row>(),db.prepare('SELECT * FROM ticks ORDER BY ts DESC LIMIT 1').first<Row>()]);
   const oldMacro:Macro={rate:last?.rate??3,fx:last?.fx??1340,oil:last?.oil??78,gold:last?.gold??2700},tickSeed=createHmac('sha256',m.seed).update(String(ts)).digest('hex'),macro=macroAt(ts,oldMacro,tickSeed),generated=ts%STEP===0?makeNews(ts,sr.results,false,macro,undefined,tickSeed):null,active=generated?[...nr.results,generated]:nr.results;
-  const next=calculateTick(sr.results,or.results,active,ts,macro,oldMacro,tickSeed),equities=next.filter(isEquity),idx=equities.reduce((v,s)=>v+s.price/s.initial,0)/Math.max(1,equities.length)*1000;
+  const cycle=marketCycle(ts,m.seed,sr.results),cycleNews=cycleArticles(cycle,ts,nr.results);
+  const next=calculateTick(sr.results,or.results,[...active,...cycleNews],ts,macro,oldMacro,tickSeed,cycle),equities=next.filter(isEquity),idx=equities.reduce((v,s)=>v+s.price/s.initial,0)/Math.max(1,equities.length)*1000;
   const commands=[insert(db,'ticks',{ts,index_value:idx,...macro}),statement(db,'UPDATE market SET last_tick=?,revision=CASE WHEN revision=? THEN revision+1 ELSE -1 END WHERE id=1',[ts,m.revision])];
   for(const s of next){
    const dates=dividendDates(sr.results.find(x=>x.id===s.id)!,ts);if(dates?.record===ts)commands.push(statement(db,"INSERT OR IGNORE INTO cash_events(id,user_id,stock_id,kind,amount,due_at,settled,created) SELECT 'dividend-'||?||'-'||stock_id||'-'||user_id,user_id,stock_id,'배당금',qty*?,?,0,? FROM holdings WHERE stock_id=? AND qty>0",[dates.ex,dates.dps,dates.pay,ts,s.id]));
@@ -90,6 +93,7 @@ export async function advanceMarket(db:D1Database,now:number,maxSteps=4){
 
   }
   if(generated)commands.push(insert(db,'news',generated));
+  for(const article of cycleNews)commands.push(insert(db,'news',article));
   commands.push(statement(db,'UPDATE accounts SET cash=cash+COALESCE((SELECT SUM(amount) FROM cash_events WHERE user_id=accounts.id AND settled=0 AND due_at<=?),0) WHERE EXISTS(SELECT 1 FROM cash_events WHERE user_id=accounts.id AND settled=0 AND due_at<=?)',[ts,ts]),statement(db,'UPDATE cash_events SET settled=1 WHERE settled=0 AND due_at<=?',[ts]));
   if(ts===session(ts).close)commands.push(db.prepare("UPDATE orders SET status='expired',reserve_cash=0 WHERE status IN ('open','partial')"));
   commands.push(statement(db,'DELETE FROM candles WHERE ts<?',[ts-90*DAY]),statement(db,'DELETE FROM news WHERE expires<?',[ts-14*DAY]));
@@ -111,7 +115,7 @@ export async function cancelOrder(db:D1Database,userId:string,id:unknown){if(typ
 export async function snapshot(db:D1Database,userId:string|null,selected:string,now:number,syncing:boolean){
  await ensureInformation(db,now);
  const[stocks,market,news,candles,index,flow,ranking,book,macroHistory]=await Promise.all([
- db.prepare('SELECT * FROM stocks WHERE active=1 ORDER BY id').all<Stock>(),db.prepare('SELECT last_tick,reset_at,reset_version FROM market WHERE id=1').first<Row>(),db.prepare('SELECT id,ts,stock_id,sector,title,body,category,details FROM news ORDER BY ts DESC LIMIT 100').all<Row>(),statement(db,'SELECT * FROM (SELECT ts,open,high,low,close,volume FROM candles WHERE stock_id=? ORDER BY ts DESC LIMIT 650) ORDER BY ts',[selected]).all<Row>(),db.prepare('SELECT * FROM (SELECT * FROM ticks ORDER BY ts DESC LIMIT 100) ORDER BY ts').all<Row>(),db.prepare("SELECT stock_id,side,SUM(qty-filled_qty) AS qty,COUNT(*) AS count FROM orders WHERE status IN ('open','partial') GROUP BY stock_id,side").all<Row>(),db.prepare('SELECT a.nickname,a.created,a.cash+a.reserved+COALESCE((SELECT SUM(h.qty*s.price) FROM holdings h JOIN stocks s ON h.stock_id=s.id WHERE h.user_id=a.id),0)+COALESCE((SELECT SUM(amount) FROM cash_events WHERE user_id=a.id AND settled=0),0) AS equity FROM accounts a JOIN credentials c ON c.user_id=a.id ORDER BY equity DESC,a.created LIMIT 20').all<Row>(),statement(db,"SELECT side,kind,limit_price,SUM(qty-filled_qty) AS qty,COUNT(*) AS count FROM orders WHERE stock_id=? AND status IN ('open','partial') GROUP BY side,kind,limit_price ORDER BY limit_price DESC",[selected]).all<Row>(),statement(db,'SELECT ts,rate,fx,oil,gold FROM ticks WHERE ts>=? ORDER BY ts',[now-30*DAY]).all<Row>()]);
+ db.prepare('SELECT * FROM stocks WHERE active=1 ORDER BY id').all<Stock>(),db.prepare('SELECT last_tick,reset_at,reset_version FROM market WHERE id=1').first<Row>(),statement(db,"SELECT id,ts,stock_id,sector,title,body,category,details FROM news WHERE id IN (SELECT id FROM news ORDER BY ts DESC LIMIT 100) OR (category IN ('시장동향','시장 이슈') AND expires>=? AND ts<=?) ORDER BY ts DESC",[now,now]).all<Row>(),statement(db,'SELECT * FROM (SELECT ts,open,high,low,close,volume FROM candles WHERE stock_id=? ORDER BY ts DESC LIMIT 650) ORDER BY ts',[selected]).all<Row>(),db.prepare('SELECT * FROM (SELECT * FROM ticks ORDER BY ts DESC LIMIT 100) ORDER BY ts').all<Row>(),db.prepare("SELECT stock_id,side,SUM(qty-filled_qty) AS qty,COUNT(*) AS count FROM orders WHERE status IN ('open','partial') GROUP BY stock_id,side").all<Row>(),db.prepare('SELECT a.nickname,a.created,a.cash+a.reserved+COALESCE((SELECT SUM(h.qty*s.price) FROM holdings h JOIN stocks s ON h.stock_id=s.id WHERE h.user_id=a.id),0)+COALESCE((SELECT SUM(amount) FROM cash_events WHERE user_id=a.id AND settled=0),0) AS equity FROM accounts a JOIN credentials c ON c.user_id=a.id ORDER BY equity DESC,a.created LIMIT 20').all<Row>(),statement(db,"SELECT side,kind,limit_price,SUM(qty-filled_qty) AS qty,COUNT(*) AS count FROM orders WHERE stock_id=? AND status IN ('open','partial') GROUP BY side,kind,limit_price ORDER BY limit_price DESC",[selected]).all<Row>(),statement(db,'SELECT ts,rate,fx,oil,gold FROM ticks WHERE ts>=? ORDER BY ts',[now-30*DAY]).all<Row>()]);
  let account:Row|null=null,holdings:Row[]=[],orders:Row[]=[],watchlist:string[]=[],cashEvents:Row[]=[],fills:Row[]=[];
  if(userId){account=await accountFor(db,userId,now);const[h,o,w,c,f]=await Promise.all([statement(db,'SELECT h.*,s.name,s.price FROM holdings h JOIN stocks s ON s.id=h.stock_id WHERE h.user_id=? AND h.qty>0',[userId]).all<Row>(),statement(db,'SELECT o.*,s.name FROM orders o JOIN stocks s ON s.id=o.stock_id WHERE user_id=? ORDER BY created DESC,id DESC LIMIT 100',[userId]).all<Row>(),statement(db,'SELECT stock_id FROM watchlist WHERE user_id=?',[userId]).all<Row>(),statement(db,'SELECT c.*,s.name FROM cash_events c LEFT JOIN stocks s ON s.id=c.stock_id WHERE user_id=? ORDER BY created DESC LIMIT 100',[userId]).all<Row>(),statement(db,'SELECT f.*,o.stock_id,o.side,s.name FROM fills f JOIN orders o ON o.id=f.order_id JOIN stocks s ON s.id=o.stock_id WHERE o.user_id=? ORDER BY f.ts DESC LIMIT 100',[userId]).all<Row>()]);holdings=h.results;orders=o.results;watchlist=w.results.map(x=>x.stock_id);cashEvents=c.results;fills=f.results;account!.receivable=(await statement(db,'SELECT COALESCE(SUM(amount),0) AS total FROM cash_events WHERE user_id=? AND settled=0',[userId]).first<Row>())!.total;}
  const selectedStock=stocks.results.find(s=>s.id===selected);const publicNews=news.results.map(publicArticle);

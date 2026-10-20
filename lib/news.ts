@@ -1,6 +1,6 @@
 import {companyProfile} from './company-profile.ts';
 import {articleDetails} from './editorial.ts';
-import {STEP,random,isEquity,session,economicCalendar,dividendDates,type Stock,type Macro} from './market-data.ts';
+import {STEP,DAY,random,isEquity,session,economicCalendar,dividendDates,type Stock,type Macro} from './market-data.ts';
 const fmt=(n:number)=>Math.round(n).toLocaleString('ko-KR'),sign=(n:number)=>(n>=0?'+':'')+n.toFixed(1)+'%',bn=(n:number)=>(n/100000000).toFixed(1)+'억 원';
 export const NEWS_TYPES=['실적','수주·계약','투자·설비','공급망','제품·서비스','산업','금리','외환','원자재','공시','배당','리서치','유통·소비','글로벌','자금조달','인사·전략','실적 전망','부동산'];
 export function makeNews(ts:number,stocks:Stock[],initial=false,macro:Macro={rate:3,fx:1340,oil:78,gold:2700},forced?:number,seed=''){
@@ -50,6 +50,6 @@ export function makeNews(ts:number,stocks:Stock[],initial=false,macro:Macro={rat
   17:[`평균 임대율은 자산의 면적·평가액 중 어떤 기준으로 가중했는지에 따라 달라진다. 임대 계약이 있어도 무상 임대 기간이나 연체가 있으면 현금 유입은 예상보다 적을 수 있다.`,`임대료가 올라도 유지보수 투자와 차입 재조달 비용이 함께 늘면 배당 여력이 줄 수 있다. 감정평가액 변동과 실제 처분 가능 가격도 동일하지 않다.`]
  };
  paragraphs.push(...context[type]);
- const row={id:initial?'briefing-v2-'+ts:'news-v2-'+ts,ts,stock_id:stockId,sector,title,body:summary,impact,expires:ts+STEP*6,category,details:{source,paragraphs,metrics,focus,...(update?{financialUpdate:update}:{})}};
+ const row={id:initial?'briefing-v2-'+ts:'news-v2-'+ts,ts,stock_id:stockId,sector,title,body:summary,impact,expires:ts+(['실적','수주·계약','실적 전망'].includes(category)?DAY*2:STEP*6),category,details:{source,paragraphs,metrics,focus,...(update?{financialUpdate:update}:{})}};
  return {...row,details:JSON.stringify(articleDetails(row))};
 }

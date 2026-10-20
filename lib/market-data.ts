@@ -4,6 +4,8 @@ export function marketInterval(ts:number){return ts<MARKET_CADENCE_SWITCH?STEP:F
 export type Row=Record<string,any>;
 export type Stock={id:string;name:string;sector:string;kind:string;initial:number;price:number;previous:number;day_open:number;high:number;low:number;volume:number;turnover:number;shares:number;pe:number;dividend:number;beta:number;net_flow:number;active:number;company_type:string;description:string;eps:number;bps:number;revenue:number;margin:number;debt_ratio:number;export_ratio:number;nav:number;nav_base:number;annual_fee:number;payout:number};
 export function random(seed:string){let h=2166136261;for(let i=0;i<seed.length;i++)h=Math.imul(h^seed.charCodeAt(i),16777619);return(h>>>0)/4294967296;}
+// Avalanche similar symbol suffixes without changing existing company identities.
+export function marketRandom(seed:string){let h=(random(seed)*4294967296)>>>0;h^=h>>>16;h=Math.imul(h,0x85ebca6b);h^=h>>>13;h=Math.imul(h,0xc2b2ae35);h^=h>>>16;return(h>>>0)/4294967296;}
 export const SPECIAL_OPEN_DAY='2026-10-19';
 export function session(ts:number){const day=Math.floor((ts+9*3600000)/DAY)*DAY-9*3600000,special=new Date(day+9*3600000).toISOString().slice(0,10)===SPECIAL_OPEN_DAY;return{day,open:day+(special?1200:1000)*60000,close:day+1420*60000,special};}
 export function nextTick(ts:number){const s=session(ts);if(ts<s.open)return s.open;if(ts>=s.close)return session(s.day+DAY).open;const interval=marketInterval(ts),next=(Math.floor(ts/interval)+1)*interval;return Math.min(s.close,ts<MARKET_CADENCE_SWITCH?Math.min(next,MARKET_CADENCE_SWITCH):next);}
