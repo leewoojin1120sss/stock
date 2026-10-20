@@ -57,6 +57,13 @@
       "when": 1792402544756,
       "tag": "0007_market_launch",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792487876815,
+      "tag": "0008_medical_harpoon",
+      "breakpoints": true
     }
   ]
 }
