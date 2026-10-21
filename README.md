@@ -91,3 +91,15 @@ node tests/runtime-smoke.mjs
 기사 개편은 기존 원문과 계좌를 보존하고 새 기사 18건을 한 번만 발행합니다. 개편 발행분은 주가나 재무 수치를 다시 적용하지 않습니다. 발표 일정은 하루에 서로 다른 기업 5곳과 시장 데스크 1곳을 배정하며 전체 기업을 순환합니다.
 
 부석 26 지수 카드를 누르면 오늘·1주·1개월 추이를 볼 수 있습니다. 지수와 경제 지표는 같은 서버 시세 기록을 사용합니다. 리서치 인하는 새 구독부터 적용하며 이미 이용 중인 패스와 결제 기록은 유지합니다.
+
+
+### Linked financial statements
+
+- Existing companies receive a one-time, transactionally guarded calibration. Most inputs blend 20% toward sector assumptions; banks/insurers use their own liability scales and REITs use rental margins. Prices, initial index bases, shares, positions, orders, cash and archived statements are preserved.
+- Revenue, operating margin and export mix update on company earnings reports, at most once per 24 hours. Elapsed time scales changes over a 7.5-day reporting window. Export receipts, imported inputs, oil, borrowing costs and confirmed news signals influence the statement; rumours do not.
+- EPS is after interest and tax. Liabilities are not all interest-bearing debt, especially at financial companies. Financial-company operating earnings already include primary funding costs.
+- Financial time follows the existing accelerated dividend convention: 30 trading sessions per financial year. Each auction accrues its share of income to equity; actual ex-dividends reduce equity. Investment cash needs can add borrowing, retained cash can repay it. BPS and debt ratio are derived together; share count stays fixed absent a corporate action.
+- Payout policy adjusts only at the session opening, based on profits and debt stress. Cash dividends use whole won, independent of share-price tick size. Existing receivables remain untouched.
+- Earnings quality, valuation and relative debt stress add only a small bounded, cross-sectionally centered price influence. Market-wide secular drift and alternating market regimes remain unchanged; cheap shares are not guaranteed to rise.
+- This is an aggregate accounting model, not full audited statements: it does not model issuance, corporate cash ledgers, loan maturities, loan-by-loan repricing or insolvency proceedings. Equity has a minimal numerical floor. Financial assumptions are company/sector parameters, not estimates of real listed businesses.
+- Accounting definitions checked against [SEC financial statements guide](https://www.sec.gov/about/reports-publications/investorpubsbegfinstmtguide) and [Investor.gov EPS](https://www.investor.gov/introduction-investing/investing-basics/glossary/earnings-share).

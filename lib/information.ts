@@ -1,3 +1,4 @@
+import {financialMetrics,financeProfile} from './fundamentals.ts';
 import {createHmac} from 'node:crypto';
 import {companyProfile} from './company-profile.ts';
 import {rateLimit} from './auth.ts';
@@ -16,6 +17,7 @@ export function makeCommunityTip(stock:Stock,ts:number,seed:string,index:number)
 export function buildResearch(stock:Stock,article:Row,now:number){
  const details=articleDetails(article),profile=companyProfile(stock),source=details.source||stock.name+' IR';
  const metrics=(details.metrics||[]) as string[][],paragraphs=(details.paragraphs||[article.body]) as string[];
+ const finance=financialMetrics(stock,stock.financial_rate??3),profileFinance=financeProfile(stock);
  const eps=stock.eps,per=eps>0?stock.price/eps:null,pbr=stock.price/stock.bps;
  const keyNumbers=metrics.slice(0,3).map(([label,value])=>label+' '+value).join(' · ');
  const sections=[
@@ -23,6 +25,7 @@ export function buildResearch(stock:Stock,article:Row,now:number){
   {title:'원문에서 확인되는 사실',body:paragraphs[0]||article.body},
   {title:'실적에 연결되는 경로',body:(paragraphs[1]||'')+' '+profile.products[0][0]+' 사업에서 실제 판매와 현금 유입으로 이어지는지가 핵심이다.'},
   {title:'가격과 재무 수치',body:'작성 시점 주가 '+money(stock.price)+'원, EPS '+money(eps)+'원, BPS '+money(stock.bps)+'원이다. '+(per?'PER '+per.toFixed(2)+'배, ':'적자로 PER은 산출하지 않으며, ')+'PBR은 '+pbr.toFixed(2)+'배다. 현재 가격을 기준으로 계산한 배수이며 적정 주가를 보장하지 않는다.'},
+  {title:'이익과 부채를 함께 보면',body:'영업이익률 '+stock.margin.toFixed(1)+'%, 부채 비율 '+stock.debt_ratio.toFixed(1)+'%, 해외 매출 비중 '+(stock.export_ratio*100).toFixed(1)+'%다. 현재 재무 구조를 기준으로 금리가 1%포인트 오르면 연간 이자 부담은 약 '+money(finance.interestDebt*.01)+'원 늘어나는 계산이다. '+(profileFinance.financial?'금융회사의 예금·보험 부채 전체를 일반 기업의 차입금처럼 계산하지 않았으며, 운용 수익과 조달 비용도 함께 살펴야 한다.':'수출 대금과 수입 원가가 함께 움직여 환율 상승이 모두 이익으로 남지는 않는다.')+' 순이익이 쌓이면 자기자본이 늘지만, 배당·투자 지출이 크면 상환 여력이 줄 수 있다.'},
   {title:'예상이 빗나갈 조건',body:details.easy.caveat+' '+(paragraphs[2]||'')},
   {title:'다음에 확인할 자료',body:(details.focus||profile.strengths).join(' · ')+'. 기사 발표 시각과 분석 작성 시각의 차이를 확인하고, 정정 공시·실제 납품·확정 실적이 나오면 기존 가정을 다시 비교한다.'}
  ];
@@ -50,7 +53,7 @@ export async function ensureInformation(db:D1Database,now:number){
   // Preserve archived articles, account balances, user discussions and paid passes.
   const current=await db.prepare('SELECT rate,fx,oil,gold FROM ticks ORDER BY ts DESC LIMIT 1').first<Macro>(),macro=current||{rate:3,fx:1340,oil:78,gold:2700};
   for(let i=0;i<NEWS_TYPES.length;i++){
-   const article=makeNews(now,stocks,false,macro,i,seed+':editorial-v3:'+i);article.id='editorial-v3-launch-'+i;article.impact=0;
+   const article=makeNews(now,stocks,false,macro,i,seed+':editorial-v3:'+i,[],false);article.id='editorial-v3-launch-'+i;article.impact=0;
    const d=JSON.parse(article.details);delete d.financialUpdate;article.details=JSON.stringify(d);updates.push(put(db,'news',article));
    if([1,4,9,15].includes(i)&&article.stock_id){const stock=stocks.find(s=>s.id===article.stock_id)!;updates.push(put(db,'research_reports',buildResearch(stock,article,now)));}
   }
@@ -63,7 +66,7 @@ export async function ensureInformation(db:D1Database,now:number){
  const used=new Set<string>();let published=0;
  for(let ts=market.info_cursor+STEP;ts<=last;ts+=STEP){
   if(ts%CONTENT_CADENCE.community===0){const stock=equities[Math.floor(marketRandom(seed+ts+'tip')*equities.length)];commands.push(put(db,'community_posts',makeCommunityTip(stock,ts,seed,Math.floor(marketRandom(seed+ts+'format')*8))));published++;}
-  if(ts%CONTENT_CADENCE.news===0&&!isOpen(ts)){const article=makeNews(ts,stocks,false,macro,(Math.floor(ts/CONTENT_CADENCE.news)+Math.floor(random(seed+'cycle')*18))%18,seed+ts);article.id='bulletin-'+ts;article.impact=0;const details=JSON.parse(article.details);delete details.financialUpdate;article.details=JSON.stringify(details);commands.push(put(db,'news',article));candidates.unshift(article);published++;}
+  if(ts%CONTENT_CADENCE.news===0&&!isOpen(ts)){const article=makeNews(ts,stocks,false,macro,(Math.floor(ts/CONTENT_CADENCE.news)+Math.floor(random(seed+'cycle')*18))%18,seed+ts,[],false);article.id='bulletin-'+ts;article.impact=0;const details=JSON.parse(article.details);delete details.financialUpdate;article.details=JSON.stringify(details);commands.push(put(db,'news',article));candidates.unshift(article);published++;}
   if(ts%CONTENT_CADENCE.research===0){let article=candidates.find(n=>n.stock_id&&n.ts<=ts&&!used.has(n.id));if(!article){article=makeNews(ts,stocks,false,macro,11,seed+'research'+ts);article.id='research-source-'+ts;article.impact=0;commands.push(put(db,'news',article));}const stock=stocks.find(s=>s.id===article.stock_id);if(stock){used.add(article.id);commands.push(put(db,'research_reports',buildResearch(stock,article,ts)));published++;}}
  }
  commands.push(q(db,'UPDATE market SET info_cursor=MAX(info_cursor,?) WHERE id=1',[last]));

@@ -17,7 +17,7 @@ export async function resetGameIfNeeded(db:D1Database,now:number){
  for(let i=0;i<18;i++)commands.push(put('news',makeNews(now-i*60000,stocks,true,undefined,i)));
  // Every statement tests the persisted marker inside one transaction. A retry
  // or simultaneous reader cannot reset money earned after the first commit.
- commands.push(db.prepare('UPDATE market SET last_tick=?,revision=revision+1,catalog_version=2,info_version=0,info_cursor=?,reset_at=?,seed=?,reset_version=? WHERE '+guard).bind(anchor,anchor,now,randomBytes(32).toString('hex'),RESET_VERSION));
+ commands.push(db.prepare('UPDATE market SET last_tick=?,revision=revision+1,catalog_version=2,fundamentals_version=1,info_version=0,info_cursor=?,reset_at=?,seed=?,reset_version=? WHERE '+guard).bind(anchor,anchor,now,randomBytes(32).toString('hex'),RESET_VERSION));
  const result=await db.batch(commands);
  return !!result.at(-1)?.meta.changes;
 }

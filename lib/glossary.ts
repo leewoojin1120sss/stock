@@ -1,5 +1,8 @@
 export type GlossaryEntry={term:string;aliases?:string[];brief?:string;meaning:string;example?:string;exact?:boolean};
 export const glossary:GlossaryEntry[]=[
+ {term:'자기자본',meaning:'회사가 가진 자산에서 갚아야 할 빚을 뺀 금액이에요. 이익을 남기면 늘고, 손실이나 배당이 나가면 줄 수 있어요.',example:'자산 150억 원에서 빚 50억 원을 빼면 자기자본은 100억 원이에요.'},
+ {term:'총부채',meaning:'회사가 앞으로 갚거나 지급해야 할 돈을 모두 합친 금액이에요. 대출뿐 아니라 아직 지급하지 않은 물품 대금 등도 포함돼요.'},
+ {term:'이자 부담',meaning:'돈을 빌려 쓴 대가로 내야 하는 비용이에요. 빌린 돈이 많거나 금리가 높아지면 이익에서 남는 돈이 줄 수 있어요.'},
  {
   "term": "EPS",
   "aliases": [

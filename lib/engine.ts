@@ -1,6 +1,7 @@
 import {createHmac,randomBytes} from 'node:crypto';
 /* Shared server-clock auction engine. All account money is integer KRW. */
 import {marketInterval,auctionsInSession,STEP,DAY,INITIAL_CASH,FEE,random,marketRandom,session,nextTick,isOpen,fee,tickSize,roundPrice,priceBounds,reserveFor,seedStocks,isEquity,macroAt,dividendDates,exDividend,economicCalendar,type Row,type Stock,type Macro} from './market-data.ts';
+import {calibrateFundamentals,accrueBalance,nextPayout,fundamentalSignal,rateSensitivity} from './fundamentals.ts';
 import {makeNews} from './news.ts';
 import {ensureInformation,informationSnapshot} from './information.ts';
 import {resetGameIfNeeded,RESET_VERSION} from './game-reset.ts';
@@ -12,7 +13,7 @@ const statement=(db:D1Database,sql:string,values:any[]=[])=>db.prepare(sql).bind
 function insert(db:D1Database,table:string,row:Row){const keys=Object.keys(row);return statement(db,`INSERT INTO ${table}(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`,Object.values(row));}
 export async function bootstrap(db:D1Database,now:number){
  if(await db.prepare('SELECT id FROM market WHERE id=1').first())return;
- const anchor=session(now).special&&now<session(now).open?Math.floor(now/STEP)*STEP:session(now).close-DAY,stocks=seedStocks(),commands=[statement(db,'INSERT INTO market(id,last_tick,revision,catalog_version,seed,reset_version,reset_at,info_cursor) VALUES(1,?,0,2,?,?,?,?)',[anchor,randomBytes(32).toString('hex'),RESET_VERSION,now,Math.floor(now/STEP)*STEP])];
+ const anchor=session(now).special&&now<session(now).open?Math.floor(now/STEP)*STEP:session(now).close-DAY,stocks=seedStocks(),commands=[statement(db,'INSERT INTO market(id,last_tick,revision,catalog_version,fundamentals_version,seed,reset_version,reset_at,info_cursor) VALUES(1,?,0,2,1,?,?,?,?)',[anchor,randomBytes(32).toString('hex'),RESET_VERSION,now,Math.floor(now/STEP)*STEP])];
  for(const s of stocks){commands.push(insert(db,'stocks',s),statement(db,'INSERT INTO candles(stock_id,ts,open,high,low,close,volume) VALUES(?,?,?,?,?,?,0)',[s.id,anchor,s.price,s.price,s.price,s.price]));}
  commands.push(statement(db,'INSERT INTO ticks(ts,index_value,rate,fx,oil,gold) VALUES(?,1000,3,1340,78,2700)',[anchor]));
  for(let i=0;i<18;i++)commands.push(insert(db,'news',makeNews(now-i*60000,stocks,true,undefined,i)));
@@ -32,14 +33,23 @@ export async function ensureCatalog(db:D1Database,now:number){
  commands.unshift(statement(db,'UPDATE market SET catalog_version=2,revision=CASE WHEN revision=? THEN revision+1 ELSE -1 END WHERE id=1',[market.revision]));
  try{await db.batch(commands);}catch(e){const current=await db.prepare('SELECT catalog_version FROM market WHERE id=1').first<Row>();if(!current||current.catalog_version<2)throw e;}
 }
+export async function ensureFundamentals(db:D1Database){
+ const market=await db.prepare('SELECT * FROM market WHERE id=1').first<Row>();if(!market||market.fundamentals_version>=1)return;
+ const stocks=(await db.prepare("SELECT * FROM stocks WHERE kind='stock' AND active=1").all<Stock>()).results;
+ const macro=await db.prepare('SELECT rate,fx,oil FROM ticks ORDER BY ts DESC LIMIT 1').first<Row>();
+ const commands=[statement(db,'UPDATE market SET fundamentals_version=1,revision=CASE WHEN revision=? THEN revision+1 ELSE -1 END WHERE id=1',[market.revision])];
+ for(const old of stocks){const s=calibrateFundamentals(old,macro?.rate??3);commands.push(statement(db,'UPDATE stocks SET revenue=?,margin=?,bps=?,debt_ratio=?,eps=?,payout=?,pe=?,dividend=?,financial_at=?,financial_fx=?,financial_oil=?,financial_rate=? WHERE id=?',[s.revenue,s.margin,s.bps,s.debt_ratio,s.eps,s.payout,s.pe,s.dividend,market.last_tick-DAY,macro?.fx??1340,macro?.oil??78,macro?.rate??3,s.id]));}
+ try{await db.batch(commands);}catch(e){const current=await db.prepare('SELECT fundamentals_version FROM market WHERE id=1').first<Row>();if(!current||current.fundamentals_version<1)throw e;}
+}
 export function calculateTick(stocks:Stock[],queued:Row[],activeNews:Row[],ts:number,macro:Macro={rate:3,fx:1340,oil:78,gold:2700},lastMacro:Macro=macro,seed='',cycle:MarketCycle|null=null){
  const rng=(key:string|number)=>marketRandom(seed+key);
  const ratio=marketInterval(ts)/STEP,scale=Math.sqrt(ratio),opening=ts===session(ts).open,eq=stocks.filter(isEquity),marketNoise=(rng(ts+'macro')-.5)*.008*scale,fx=macro.fx/lastMacro.fx-1,oil=macro.oil/lastMacro.oil-1,rate=macro.rate-lastMacro.rate;
+ const meanFundamental=eq.reduce((v,s)=>v+fundamentalSignal(s),0)/Math.max(1,eq.length);
  const next=eq.map(s=>{
   const demand=queued.filter(o=>o.stock_id===s.id).reduce((v,o)=>v+(o.side==='buy'?1:-1)*(o.qty-(o.filled_qty||0))*s.price,0),flow=Math.tanh(demand/(s.price*3000))*.009;
   const auctions=auctionsInSession(ts);
   const newsImpact=activeNews.filter(n=>n.ts<=ts&&n.expires>=ts).reduce((v,n)=>{const age=ts-n.ts,weight=n.stock_id===s.id?1:n.sector===s.sector?.24:0,burst=Math.max(0,1-age/(STEP*6))*ratio,tail=['실적','수주·계약','실적 전망'].includes(n.category)?.12*Math.exp(-age/(DAY*.8))/auctions:0;return v+n.impact*weight*(burst+tail)},0);
-  const oilExposure=s.sector==='에너지'?.35:['운송','물류','식품','이차전지'].includes(s.sector)?-.5:0,rateExposure=s.sector==='부동산'?-.012:s.company_type==='은행 금융지주'?.003:-.004;
+  const oilExposure=s.sector==='에너지'?.35:['운송','물류','식품','이차전지'].includes(s.sector)?-.5:0,rateExposure=rateSensitivity(s);
   const tradingSession=session(ts);
   // Rebuild distributable value throughout the session rather than only subtracting it at ex-date.
   const schedule=dividendDates(s,ts),payments=s.company_type.includes('리츠')&&!tradingSession.special?2:1;
@@ -48,10 +58,11 @@ export function calculateTick(stocks:Stock[],queued:Row[],activeNews:Row[],ts:nu
   const logMove=marketNoise*s.beta+(rng(ts+s.sector)-.5)*.013*scale+(rng(ts+s.id)-.5)*.023*s.beta*scale+shock+flow+newsImpact+fx*(s.export_ratio*.5-(['운송','유통'].includes(s.sector)?.5:.1))+oil*oilExposure+rate*rateExposure;
   // Symmetric log moves avoid the compounding loss of symmetric percentage moves.
   // Small growth is a market-wide tendency; no individual holding has a promised return.
-  const change=Math.expm1(logMove+(cycle?cycleMove(s,cycle,ts,auctions):.0004/auctions)+dividendCarry);
+  const change=Math.expm1(logMove+(cycle?cycleMove(s,cycle,ts,auctions):.0004/auctions)+(fundamentalSignal(s)-meanFundamental)/auctions+dividendCarry);
   const dividend=exDividend(s,ts),previous=roundPrice(Math.max(1,(opening?s.price:s.previous)-dividend),s.kind),reference=roundPrice(Math.max(1,s.price-dividend),s.kind),{lower,upper}=priceBounds(previous,s.kind),price=Math.max(lower,Math.min(upper,roundPrice(reference*(1+change),s.kind)));
-  const report=activeNews.find(n=>n.ts===ts&&n.stock_id===s.id&&n.category==='실적'),update=report?JSON.parse(report.details||'{}').financialUpdate:null,eps=update?.eps??s.eps,revenue=update?.revenue??s.revenue;
-  return{...s,eps,revenue,price,previous,day_open:opening?price:s.day_open,high:opening?price:Math.max(s.high,price),low:opening?price:Math.min(s.low,price),volume:opening?0:s.volume,turnover:opening?0:s.turnover,net_flow:opening?0:s.net_flow,pe:eps>0?Math.round(price/eps*100)/100:0,dividend:s.payout/price*100};
+  const report=activeNews.find(n=>n.ts===ts&&n.stock_id===s.id&&n.category==='실적'),rawUpdate=report?JSON.parse(report.details||'{}').financialUpdate:null,update=rawUpdate?.financial_at===ts&&ts-(s.financial_at||0)>=DAY?rawUpdate:null;
+  const financial={...s,...(update||{}),...accrueBalance(s,auctions,dividend),payout:opening?nextPayout(s):s.payout},eps=financial.eps;
+  return{...financial,price,previous,day_open:opening?price:s.day_open,high:opening?price:Math.max(s.high,price),low:opening?price:Math.min(s.low,price),volume:opening?0:s.volume,turnover:opening?0:s.turnover,net_flow:opening?0:s.net_flow,pe:eps>0?Math.round(price/eps*100)/100:0,dividend:financial.payout/price*100};
  });
  const ret=(filter:(s:Stock)=>boolean)=>{const v=next.filter(filter);return v.length?v.reduce((n,s)=>n+s.price/s.previous,0)/v.length-1:0},dayReturn=ret(()=>true);
  for(const s of stocks.filter(s=>s.active!==0&&s.kind!=='stock')){
@@ -71,11 +82,11 @@ export function calculateTick(stocks:Stock[],queued:Row[],activeNews:Row[],ts:nu
  return next;
 }
 export async function advanceMarket(db:D1Database,now:number,maxSteps=4){
- await bootstrap(db,now);await resetGameIfNeeded(db,now);await ensureCatalog(db,now);
+ await bootstrap(db,now);await resetGameIfNeeded(db,now);await ensureCatalog(db,now);await ensureFundamentals(db);
  for(let step=0;step<maxSteps;step++){
   const m=await db.prepare('SELECT * FROM market WHERE id=1').first<Row>();if(!m)throw Error('MARKET_MISSING');const ts=nextTick(m.last_tick);if(ts>now)return false;
   const [sr,or,nr,last]=await Promise.all([db.prepare('SELECT * FROM stocks WHERE active=1 ORDER BY id').all<Stock>(),statement(db,"SELECT rowid AS sequence,* FROM orders WHERE status IN ('open','partial') AND created<? ORDER BY created,rowid",[ts]).all<Row>(),statement(db,'SELECT * FROM news WHERE expires>=? AND ts<=?',[ts,ts]).all<Row>(),db.prepare('SELECT * FROM ticks ORDER BY ts DESC LIMIT 1').first<Row>()]);
-  const oldMacro:Macro={rate:last?.rate??3,fx:last?.fx??1340,oil:last?.oil??78,gold:last?.gold??2700},tickSeed=createHmac('sha256',m.seed).update(String(ts)).digest('hex'),macro=macroAt(ts,oldMacro,tickSeed),generated=ts%STEP===0?makeNews(ts,sr.results,false,macro,undefined,tickSeed):null,active=generated?[...nr.results,generated]:nr.results;
+  const oldMacro:Macro={rate:last?.rate??3,fx:last?.fx??1340,oil:last?.oil??78,gold:last?.gold??2700},tickSeed=createHmac('sha256',m.seed).update(String(ts)).digest('hex'),macro=macroAt(ts,oldMacro,tickSeed),generated=ts%STEP===0?makeNews(ts,sr.results,false,macro,undefined,tickSeed,nr.results):null,active=generated?[...nr.results,generated]:nr.results;
   const cycle=marketCycle(ts,m.seed,sr.results),cycleNews=cycleArticles(cycle,ts,nr.results);
   const next=calculateTick(sr.results,or.results,[...active,...cycleNews],ts,macro,oldMacro,tickSeed,cycle),equities=next.filter(isEquity),idx=equities.reduce((v,s)=>v+s.price/s.initial,0)/Math.max(1,equities.length)*1000;
   const commands=[insert(db,'ticks',{ts,index_value:idx,...macro}),statement(db,'UPDATE market SET last_tick=?,revision=CASE WHEN revision=? THEN revision+1 ELSE -1 END WHERE id=1',[ts,m.revision])];
@@ -89,7 +100,7 @@ export async function advanceMarket(db:D1Database,now:number,maxSteps=4){
     commands.push(insert(db,'fills',{id:o.id+':'+ts,order_id:o.id,qty,price:s.price,fee:fee(s.price*qty),ts}));
    }
    const volume=Math.max(buys,sells),net=buys-sells,old=sr.results.find(x=>x.id===s.id)!;
-   commands.push(statement(db,'UPDATE stocks SET price=?,previous=?,day_open=?,high=?,low=?,volume=?,turnover=?,net_flow=?,eps=?,revenue=?,pe=?,dividend=?,nav=?,nav_base=? WHERE id=?',[s.price,s.previous,s.day_open,s.high,s.low,s.volume+volume,s.turnover+volume*s.price,s.net_flow+net,s.eps,s.revenue,s.pe,s.dividend,s.nav,s.nav_base,s.id]),statement(db,'INSERT INTO candles(stock_id,ts,open,high,low,close,volume) VALUES(?,?,?,?,?,?,?)',[s.id,ts,ts===session(ts).open?s.previous:old.price,Math.max(ts===session(ts).open?s.previous:old.price,s.price),Math.min(ts===session(ts).open?s.previous:old.price,s.price),s.price,volume]));
+   commands.push(statement(db,'UPDATE stocks SET price=?,previous=?,day_open=?,high=?,low=?,volume=?,turnover=?,net_flow=?,eps=?,revenue=?,pe=?,dividend=?,nav=?,nav_base=?,bps=?,debt_ratio=?,margin=?,export_ratio=?,payout=?,financial_at=?,financial_fx=?,financial_oil=?,financial_rate=? WHERE id=?',[s.price,s.previous,s.day_open,s.high,s.low,s.volume+volume,s.turnover+volume*s.price,s.net_flow+net,s.eps,s.revenue,s.pe,s.dividend,s.nav,s.nav_base,s.bps,s.debt_ratio,s.margin,s.export_ratio,s.payout,s.financial_at||0,s.financial_fx||1340,s.financial_oil||78,s.financial_rate??3,s.id]),statement(db,'INSERT INTO candles(stock_id,ts,open,high,low,close,volume) VALUES(?,?,?,?,?,?,?)',[s.id,ts,ts===session(ts).open?s.previous:old.price,Math.max(ts===session(ts).open?s.previous:old.price,s.price),Math.min(ts===session(ts).open?s.previous:old.price,s.price),s.price,volume]));
 
   }
   if(generated)commands.push(insert(db,'news',generated));
