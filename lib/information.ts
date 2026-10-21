@@ -1,45 +1,17 @@
 import {createHmac} from 'node:crypto';
 import {companyProfile} from './company-profile.ts';
 import {rateLimit} from './auth.ts';
-import {makeNews} from './news.ts';
+import {makeNews,NEWS_TYPES} from './news.ts';
+import {communityRumor} from './community-rumors.ts';
 import {articleDetails} from './editorial.ts';
-import {random,STEP,isOpen,type Row,type Stock,DAY,type Macro} from './market-data.ts';
+import {random,marketRandom,STEP,isOpen,type Row,type Stock,DAY,type Macro} from './market-data.ts';
 export const RESEARCH_COST=500000,RESEARCH_DURATION=DAY;
 export const CONTENT_CADENCE={community:20*60000,news:30*60000,research:60*60000};
 const q=(db:D1Database,sql:string,args:unknown[]=[])=>db.prepare(sql).bind(...args);
 const put=(db:D1Database,table:string,row:Row)=>{const keys=Object.keys(row);return q(db,`INSERT OR IGNORE INTO ${table}(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`,Object.values(row));};
 const money=(n:number)=>Math.round(n).toLocaleString('ko-KR');
 export function companyRelease(stock:Stock,ts:number){const p=companyProfile(stock);return{id:'company-ir-'+stock.id,ts,stock_id:stock.id,sector:stock.sector,title:stock.name+' | '+p.slogan,body:p.promise,impact:0,expires:ts+DAY*365,category:'기업소식',details:JSON.stringify({source:stock.name+' IR',paragraphs:[p.promise,stock.description,p.products.map(([name,desc])=>name+': '+desc).join(' · '),'사업별 비중은 '+p.segments.map(s=>s.name+' '+s.share+'%').join(', ')+'입니다. 각 사업의 판매량과 비용이 전체 실적에 얼마나 반영되는지 다음 발표와 비교할 수 있습니다.'],metrics:stock.kind==='stock'?[['주요 사업',stock.company_type],['사업 거점',p.location],['해외 매출',(stock.export_ratio*100).toFixed(1)+'%']]:[['상품 유형',stock.company_type],['연간 운용 비용',(stock.annual_fee*100).toFixed(2)+'%'],['순자산가치',stock.nav.toFixed(2)+'원']],focus:p.strengths})};}
-const sectorLeads:Record<string,[string,string]>={
- 'IT 서비스':['회사에서 이 서비스 쓰는 사람?','새 고객이 늘었다던데 진짜인가요? 쓰기 편해졌으면 저는 조금 오를 것 같아요. 그냥 제 느낌입니다.'],
- '바이오':['신약 소문 믿어도 될까요','시험 잘됐다는 얘기가 도는데 원문은 못 봤어요. 기대만으로 너무 오른 것 같아서 저는 일단 기다려요.'],
- '금융':['은행 이자 수입 늘까요','대출 이자 받는 게 늘면 좋은 거 아닌가요? 못 갚는 사람도 늘 수 있다길래 헷갈리네요.'],
- '에너지':['기름값 오르면 여기도 오름?','기름값이 오른다는 글 봤는데 이 회사도 돈 더 버나요? 재료 사는 값도 오를 것 같아서 모르겠어요.'],
- '콘텐츠':['새 작품 해외에서 인기라던데','해외에서 반응 좋다는 글 몇 개 봤어요. 저는 좀 기대되는데 댓글만 보고 믿으면 안 되겠죠.'],
- '유통':['매장 사람 꽤 많던데요','주말에 손님 많았다는 후기 봤어요. 할인 때문에 붐빈 걸 수도 있지만 저는 매출 기대해봅니다.'],
- '자동차':['새 차 반응 괜찮은 듯','디자인 괜찮다는 얘기 많네요. 잘 팔리면 오를 것 같은데 실제 판매 숫자는 아직 못 봤어요.'],
- '반도체':['공장 바쁘다던데 출처 있음?','공장이 바쁘다는 글 봤는데 어디서 나온 얘긴가요? 주문이 진짜 늘었으면 좋겠네요.'],
- '플랫폼':['이 앱 요즘 자주 보이네요','주변에서 쓰는 사람이 늘었어요. 제 주변만 그럴 수도 있어서 주식은 더 지켜보려구요.'],
- '게임':['신작 해본 사람 후기 좀','영상은 재밌어 보이던데 해보신 분 있나요? 저는 출시 전에 기대감으로 오를 것 같아요. 틀릴 수도요.'],
- '이차전지':['배터리 주문 줄었다는 말 있던데','누가 주문 줄었다고 하던데 확인은 못 했어요. 진짜면 좀 내릴 것 같아서 일단 안 사려구요.'],
- '조선':['배 주문 많이 받았다는 글 봄','배를 많이 주문받았다는데 돈은 나중에 들어오는 거죠? 바로 이익이 확 늘어나는 건 아닌 듯해요.'],
- '식품':['신제품 또 사먹을 듯?','맛있다는 후기가 꽤 보이네요. 많이 팔리면 좋겠지만 후기 몇 개로 전체를 알긴 어렵겠죠.'],
- '로봇':['로봇 설치 늘었다는 얘기','공장에 로봇 더 넣는다는 소문 있네요. 저는 기대 중인데 계약 발표부터 기다려볼게요.'],
- '부동산':['빈 사무실 줄었다던데','빌딩에 새 회사 들어온다는 글 봤어요. 월세 더 받으면 좋겠지만 이자도 많이 낼 것 같네요.'],
- '운송':['비행기 좌석 꽉 찼다는 후기','사람 많으면 돈 잘 벌까요? 기름값 비싸서 생각보다 안 남을 수도 있겠네요.'],
- '헬스케어':['약 생산 늘린다는 소문','생산 늘린다는 얘기를 들었는데 확인된 글은 못 찾았어요. 저는 아직 지켜보는 쪽입니다.'],
- '지주':['자회사 잘되면 여기도 오르나요','자회사가 잘나간다는데 이 회사에도 돈이 들어오겠죠? 어떻게 연결되는지 아시는 분 있나요.'],
- '방산':['해외 계약 얘기 또 나오네요','이번엔 계약된 건지 협상 중인 건지 모르겠어요. 저는 기대하지만 발표 전엔 크게 안 살래요.'],
- '전력':['발전소 점검 끝났다는 얘기','다시 전기 많이 만들면 나아지려나요? 수리비 얼마나 들었는지는 못 봤어요.'],
- '물류':['배송 물량 늘었다던데요','배송 많아졌다는 글 봤는데 사람 뽑는 비용도 늘겠죠? 저는 조금 기대하고 있어요.'],
- '통신':['요금제 바꾸는 사람 많네요','싼 요금제로 바꾸는 사람 많던데 회사는 돈 덜 버는 거 아닌가요? 제 생각엔 조금 부담일 듯요.'],
- '전자상거래':['배송 빨라졌다는 후기','저는 편해졌다는 글을 많이 봤어요. 주문은 늘 것 같은데 배송비로 얼마나 남는지는 모르겠네요.']
-};
-export function makeCommunityTip(stock:Stock,ts:number,seed:string,index:number){
- const r=random(seed+stock.id+ts),p=companyProfile(stock),specific=sectorLeads[stock.sector]||['요즘 이 회사 어떻게 봐요?','저는 아직 고민 중이에요. 최근 소식 아는 분 있나요?'];
- const claims:[string,string][]=[specific,['이번엔 오를 것 같아요','최근 기사 보고 조금 기대 중이에요. 그래도 이미 많이 오른 거면 내릴 수도 있겠죠. 저는 소액만 생각 중입니다.'],['저는 좀 내릴 것 같은데요','기대가 너무 큰 것 같아요. 실제로 잘 팔리는지 보고 사려구요. 제 예상이 틀릴 수도 있어요.'],['직접 써본 사람 있나요?',p.products[0][0]+' 써본 분 후기 좀 부탁해요. 광고 말고 실제 느낌 궁금합니다.'],['지금 사는 건 너무 급할까요','가격이 움직이니까 마음이 급하네요. 회사가 잘 버는지부터 봐야겠죠? 다들 어떻게 보세요.'],['소문 출처 찾은 분?','단톡방에 좋은 얘기 돌던데 원문은 없네요. 확인 안 된 소문일 수도 있으니 저는 일단 기다릴게요.'],['배당 언제 들어오는지 아세요','배당 준다는데 몇 시까지 가지고 있어야 하나요? 배당 받으면 주가도 내려간다던데 헷갈려요.'],['기사랑 주가 반대로 가네요','기사 좋아 보이는데 왜 내리죠? 사람들이 더 좋은 발표를 기대한 건가요. 쉽게 설명해주실 분?']];
- const pair=claims[index%claims.length];return{id:'market-tip-'+ts+'-'+index,user_id:null,stock_id:stock.id,title:stock.name+' · '+pair[0],body:pair[1],source:'unverified',author:['상승기대봇','관망봇','종목수다봇','소문메모봇'][Math.floor(r*4)],created:ts};
-}
+export function makeCommunityTip(stock:Stock,ts:number,seed:string,index:number){return{id:'market-tip-'+ts+'-'+index,user_id:null,stock_id:stock.id,...communityRumor(stock,ts,seed,index),source:'unverified',created:ts};}
 export function buildResearch(stock:Stock,article:Row,now:number){
  const details=articleDetails(article),profile=companyProfile(stock),source=details.source||stock.name+' IR';
  const metrics=(details.metrics||[]) as string[][],paragraphs=(details.paragraphs||[article.body]) as string[];
@@ -68,12 +40,20 @@ export async function ensureInformation(db:D1Database,now:number){
   rows.push(q(db,'UPDATE market SET info_version=1,info_cursor=MAX(info_cursor,?) WHERE id=1',[Math.floor(now/STEP)*STEP]));
   await db.batch(rows);market={...market,info_version:1,info_cursor:Math.max(market.info_cursor,Math.floor(now/STEP)*STEP)};
  }
- if(market.info_version<2){
+ if(market.info_version<3){
   // Refresh automated wording only; player posts, money and paid passes stay intact.
   const old=(await db.prepare("SELECT * FROM community_posts WHERE user_id IS NULL AND source='unverified' ORDER BY created DESC LIMIT 100").all<Row>()).results;
   const updates:D1PreparedStatement[]=[];
   for(const post of old){const stock=stocks.find(s=>s.id===post.stock_id);if(!stock)continue;const index=Number(String(post.id).split('-').at(-1))||0,next=makeCommunityTip(stock,post.created,seed,index);updates.push(q(db,'UPDATE community_posts SET title=?,body=?,author=? WHERE id=? AND user_id IS NULL',[next.title,next.body,next.author,post.id]));}
-  updates.push(db.prepare('UPDATE market SET info_version=2 WHERE id=1 AND info_version<2'));await db.batch(updates);
+  // A bounded, once-only launch edition makes the new writing visible at once.
+  // Preserve archived articles, account balances, user discussions and paid passes.
+  const current=await db.prepare('SELECT rate,fx,oil,gold FROM ticks ORDER BY ts DESC LIMIT 1').first<Macro>(),macro=current||{rate:3,fx:1340,oil:78,gold:2700};
+  for(let i=0;i<NEWS_TYPES.length;i++){
+   const article=makeNews(now,stocks,false,macro,i,seed+':editorial-v3:'+i);article.id='editorial-v3-launch-'+i;article.impact=0;
+   const d=JSON.parse(article.details);delete d.financialUpdate;article.details=JSON.stringify(d);updates.push(put(db,'news',article));
+   if([1,4,9,15].includes(i)&&article.stock_id){const stock=stocks.find(s=>s.id===article.stock_id)!;updates.push(put(db,'research_reports',buildResearch(stock,article,now)));}
+  }
+  updates.push(db.prepare('UPDATE market SET info_version=3 WHERE id=1 AND info_version<3'));await db.batch(updates);
  }
  const due=Math.floor(now/STEP)*STEP,last=Math.min(due,market.info_cursor+24*STEP),commands:D1PreparedStatement[]=[];
  if(last<=market.info_cursor)return{syncing:false,published:0};
@@ -81,7 +61,7 @@ export async function ensureInformation(db:D1Database,now:number){
  const candidates=(await db.prepare("SELECT n.* FROM news n WHERE n.stock_id IS NOT NULL AND n.category!='기업소식' AND NOT EXISTS(SELECT 1 FROM research_reports r WHERE r.news_id=n.id) ORDER BY n.ts DESC LIMIT 60").all<Row>()).results;
  const used=new Set<string>();let published=0;
  for(let ts=market.info_cursor+STEP;ts<=last;ts+=STEP){
-  if(ts%CONTENT_CADENCE.community===0){const stock=equities[Math.floor(random(seed+ts+'tip')*equities.length)];commands.push(put(db,'community_posts',makeCommunityTip(stock,ts,seed,Math.floor(random(seed+ts+'format')*8))));published++;}
+  if(ts%CONTENT_CADENCE.community===0){const stock=equities[Math.floor(marketRandom(seed+ts+'tip')*equities.length)];commands.push(put(db,'community_posts',makeCommunityTip(stock,ts,seed,Math.floor(marketRandom(seed+ts+'format')*8))));published++;}
   if(ts%CONTENT_CADENCE.news===0&&!isOpen(ts)){const article=makeNews(ts,stocks,false,macro,(Math.floor(ts/CONTENT_CADENCE.news)+Math.floor(random(seed+'cycle')*18))%18,seed+ts);article.id='bulletin-'+ts;article.impact=0;const details=JSON.parse(article.details);delete details.financialUpdate;article.details=JSON.stringify(details);commands.push(put(db,'news',article));candidates.unshift(article);published++;}
   if(ts%CONTENT_CADENCE.research===0){let article=candidates.find(n=>n.stock_id&&n.ts<=ts&&!used.has(n.id));if(!article){article=makeNews(ts,stocks,false,macro,11,seed+'research'+ts);article.id='research-source-'+ts;article.impact=0;commands.push(put(db,'news',article));}const stock=stocks.find(s=>s.id===article.stock_id);if(stock){used.add(article.id);commands.push(put(db,'research_reports',buildResearch(stock,article,ts)));published++;}}
  }

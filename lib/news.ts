@@ -1,11 +1,13 @@
 import {companyProfile} from './company-profile.ts';
 import {articleDetails} from './editorial.ts';
-import {STEP,DAY,random,isEquity,session,economicCalendar,dividendDates,type Stock,type Macro} from './market-data.ts';
+import {newsNarrative} from './news-narrative.ts';
+import {splitTerms} from './glossary.ts';
+import {STEP,DAY,random,marketRandom,isEquity,session,economicCalendar,dividendDates,type Stock,type Macro} from './market-data.ts';
 const fmt=(n:number)=>Math.round(n).toLocaleString('ko-KR'),sign=(n:number)=>(n>=0?'+':'')+n.toFixed(1)+'%',bn=(n:number)=>(n/100000000).toFixed(1)+'억 원';
 export const NEWS_TYPES=['실적','수주·계약','투자·설비','공급망','제품·서비스','산업','금리','외환','원자재','공시','배당','리서치','유통·소비','글로벌','자금조달','인사·전략','실적 전망','부동산'];
 export function makeNews(ts:number,stocks:Stock[],initial=false,macro:Macro={rate:3,fx:1340,oil:78,gold:2700},forced?:number,seed=''){
- const rng=(key:string|number)=>random(seed+key);
- const eq=stocks.filter(isEquity),slot=forced??Math.round((ts-session(ts).open)/STEP),scheduled=initial||forced!==undefined?undefined:economicCalendar(ts,stocks).find(e=>e.ts===ts),scheduledTypes:Record<string,number>={'산업 주문지수':5,'기업 실적 브리핑':0,'외환·원자재 동향':7,'설비투자·공급망':2,'실적·전망 업데이트':16,'기업 공시 브리핑':9},type=scheduled?scheduledTypes[String(scheduled.title)]:((slot+Math.floor(rng(session(ts).day+'news-cycle')*18))%18+18)%18;
+ const rng=(key:string|number)=>marketRandom(seed+key);
+ const eq=stocks.filter(isEquity),slot=forced??Math.round((ts-session(ts).open)/STEP),scheduled=initial||forced!==undefined?undefined:economicCalendar(ts,stocks).find(e=>e.ts===ts),type=forced!==undefined?((forced%NEWS_TYPES.length)+NEWS_TYPES.length)%NEWS_TYPES.length:scheduled?scheduled.newsType:((slot+Math.floor(rng(session(ts).day+'news-cycle')*NEWS_TYPES.length))%NEWS_TYPES.length+NEWS_TYPES.length)%NEWS_TYPES.length;
  const pool=type===3?eq.filter(s=>['에너지','자동차','반도체','이차전지','조선','식품','로봇','헬스케어','물류'].includes(s.sector)):type===1?eq.filter(s=>!['금융','부동산','지주','유통','전자상거래'].includes(s.sector)):type===12?eq.filter(s=>['유통','식품','전자상거래'].includes(s.sector)):type===13?eq.filter(s=>s.export_ratio>.5):eq;
  const stock=(scheduled?eq.find(s=>s.id===scheduled.stock_id):undefined)||pool[Math.floor(rng(ts+'news-symbol')*pool.length)]||eq[0],n=stock.name,noise=(rng(ts+'surprise')-.5),growth=Number((noise*38).toFixed(1)),quarter=stock.revenue/4*(1+growth/100),consensus=quarter/(1+noise*.2),profit=quarter*stock.margin/100,capex=stock.revenue*(.02+rng(ts+'capex')*.08),duration=12+Math.floor(rng(ts+'duration')*24),contract=stock.revenue*(.08+rng(ts+'contract')*.22),quarterEPS=profit*.78/stock.shares,expectedContract=contract/(1+(rng(ts+'contract-surprise')-.5)*.5);
  let title='',summary='',paragraphs:string[]=[],metrics:[string,string,string?][]=[],focus:string[]=[],impact=noise*.012,source=n+' IR',category=NEWS_TYPES[type],stockId:string|null=stock.id,sector:string|null=stock.sector,update:Record<string,number>|undefined;
@@ -50,6 +52,9 @@ export function makeNews(ts:number,stocks:Stock[],initial=false,macro:Macro={rat
   17:[`평균 임대율은 자산의 면적·평가액 중 어떤 기준으로 가중했는지에 따라 달라진다. 임대 계약이 있어도 무상 임대 기간이나 연체가 있으면 현금 유입은 예상보다 적을 수 있다.`,`임대료가 올라도 유지보수 투자와 차입 재조달 비용이 함께 늘면 배당 여력이 줄 수 있다. 감정평가액 변동과 실제 처분 가능 가격도 동일하지 않다.`]
  };
  paragraphs.push(...context[type]);
- const row={id:initial?'briefing-v2-'+ts:'news-v2-'+ts,ts,stock_id:stockId,sector,title,body:summary,impact,expires:ts+(['실적','수주·계약','실적 전망'].includes(category)?DAY*2:STEP*6),category,details:{source,paragraphs,metrics,focus,...(update?{financialUpdate:update}:{})}};
- return {...row,details:JSON.stringify(articleDetails(row))};
+ const story=newsNarrative({stock,type,ts,seed,macro,metrics,paragraphs,focus,growth,noise});
+ const row={id:initial?'briefing-v2-'+ts:'news-v2-'+ts,ts,stock_id:story.stockId,sector:story.sector,title:story.title,body:story.summary,impact,expires:ts+(['실적','수주·계약','실적 전망'].includes(category)?DAY*2:STEP*6),category,details:{source:story.source,reportingSource:source,paragraphs:story.paragraphs,metrics,focus:story.focus,oneLine:story.oneLine,storyKey:story.storyKey,editorialVersion:3,...(update?{financialUpdate:update}:{})}};
+ const details=articleDetails(row),terms=[...new Map(splitTerms(story.paragraphs.join(' ')).filter(p=>p.entry).map(p=>[p.entry!.term,p.entry!])).values()].slice(0,4).map(e=>[e.term,e.meaning]);
+ details.easy={...details.easy,summary:story.oneLine,terms:terms.length?terms:details.easy.terms,...([4,5,9,15].includes(type)?{impact:'실제 계약과 판매가 늘면 회사에 도움이 될 수 있어요. 하지만 대응 비용이 더 들거나 고객이 떠나면 기대와 달라질 수 있어요. 고객 반응과 회사가 실제로 받은 돈을 함께 확인해요.',caveat:'협의 중인 내용과 시험 결과가 모두 최종 결정은 아니에요. 회사의 설명이 바뀌거나 고객 반응이 예상과 다를 수 있어요.'}:{})};
+ return {...row,details:JSON.stringify(details)};
 }
