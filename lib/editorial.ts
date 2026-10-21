@@ -28,4 +28,4 @@ export function articleDetails(article:Row):Row{
  const fact=(details.metrics||[]).slice(0,2).map(([label,value]:string[])=>`${label} ${value}`).join(' · ');
  return {...details,oneLine:details.oneLine||`${g[0]}${fact?' '+fact+'.':''}`,easy:details.easy||{summary:g[0],terms:g[2],impact:g[1],caveat:g[3]}};
 }
-export function publicArticle(article:Row):Row{const details=articleDetails(article);delete details.financialUpdate;const {impact,expires,...safe}=article;return {...safe,details};}
+export function publicArticle(article:Row):Row{const details=articleDetails(article);delete details.financialUpdate;const {impact,expires,...safe}=article;return {...safe,title:String(safe.title||'').replace(/^.*와 손잡은 (.+)… 장기 공급 관계로 이어질까$/,'$1, 새 공급 계약… 납품 이후 남을 이익은'),details};}
