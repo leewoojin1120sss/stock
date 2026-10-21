@@ -130,3 +130,5 @@
 .easy-reading-terms{display:flex;flex-wrap:wrap;gap:8px 16px;margin:14px 0;font-size:14px;line-height:1.8}
 .calendar-event>div{min-width:0}.calendar-event b,.calendar-event small{overflow-wrap:anywhere;line-height:1.6}
 @media(max-width:600px){.news-feed .news-feed-row{padding:20px 17px}.news-feed .news-feed-row h2{font-size:18px}.news-feed .news-list-deck{font-size:14px;line-height:1.8}.calendar-panel .calendar-event{display:flex;width:100%;min-height:0}.news-feed .news-card-footer>span>span{display:block;margin-left:0}}
+
+.index-chart-trigger{text-align:left;display:block;width:100%;cursor:pointer;color:inherit;font:inherit;transition:border-color .15s,box-shadow .15s}.index-chart-trigger:hover{border-color:#639f8b;box-shadow:0 2px 12px #2b665d14}.index-chart-trigger:focus-visible{outline:2px solid #2d8872;outline-offset:3px}.index-chart-trigger .stat-bottom>span{overflow:hidden;text-overflow:ellipsis}

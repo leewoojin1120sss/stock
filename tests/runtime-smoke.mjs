@@ -14,7 +14,7 @@ const mf=new Miniflare({modules:true,scriptPath:output,compatibilityDate:'2026-0
 try{
  const db=await mf.getD1Database('DB');for(const name of readdirSync(resolve(root,'drizzle')).filter(n=>n.endsWith('.sql')).sort())for(const sql of readFileSync(resolve(root,'drizzle',name),'utf8').split('--> statement-breakpoint'))if(sql.trim())await db.prepare(sql).run();
  const call=async(path,body,cookie='',clock)=>{const r=await mf.dispatchFetch('https://stock.test'+path,{...(body?{method:'POST',body:JSON.stringify(body)}:{}),headers:{Origin:'https://stock.test','Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...(clock?{'x-smoke-now':String(clock)}:{})}});const json=await r.json();return{status:r.status,json,cookie:r.headers.get('Set-Cookie')?.split(';')[0]||''}};
- const anon=await call('/api/game',null,'',Date.parse('2026-10-20T16:30:00+09:00'));assert.equal(anon.status,200);assert.equal(anon.json.stocks.length,34);assert.equal(anon.json.account,null);
+ const anon=await call('/api/game',null,'',Date.parse('2026-10-20T16:30:00+09:00'));assert.equal(anon.status,200);assert.equal(anon.json.stocks.length,34);assert.equal(anon.json.account,null);assert.ok(anon.json.macroHistory.every(row=>Number.isFinite(row.index_value)));
  const input={action:'register',login:'runtime_check',password:'runtime-test-password-4842',nickname:'런타임 검증'},registered=await call('/api/auth',input);assert.equal(registered.status,201,JSON.stringify(registered.json));assert.ok(registered.cookie.startsWith('__Host-bs_session='));
  const me=await call('/api/game',null,registered.cookie);assert.equal(me.json.account.nickname,input.nickname);assert.equal(me.json.account.cash,10000000);assert.equal(me.json.ranking.length,1);
  const changed=await call('/api/game',{action:'nickname',nickname:'수정한 투자자'},registered.cookie);assert.equal(changed.status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account.nickname,'수정한 투자자');
@@ -23,12 +23,12 @@ try{
  const open=Date.parse('2026-10-20T16:40:00+09:00');
  const ordered=await call('/api/game',{action:'order',stockId:'000001',side:'buy',kind:'market',qty:10,requestKey:crypto.randomUUID()},registered.cookie,open);assert.equal(ordered.status,200,JSON.stringify(ordered.json));
  const filled=await call('/api/game',null,registered.cookie,open+600000);assert.equal(filled.status,200);assert.equal(filled.json.orders[0].status,'filled');assert.equal(filled.json.holdings[0].qty,10);assert.equal(filled.json.account.reserved,0);
- const info=await call('/api/information');assert.equal(info.status,200);assert.ok(info.json.posts.length>=12);assert.ok(info.json.reports.length>0);assert.ok(info.json.reports.every(r=>!Object.hasOwn(r,'body')));assert.ok(info.json.posts.every(p=>!Object.hasOwn(p,'user_id')));
+ const info=await call('/api/information');assert.equal(info.status,200);assert.equal(info.json.subscription.cost,100000);assert.equal(info.json.subscription.duration,86400000);assert.ok(info.json.posts.length>=12);assert.ok(info.json.reports.length>0);assert.ok(info.json.reports.every(r=>!Object.hasOwn(r,'body')));assert.ok(info.json.posts.every(p=>!Object.hasOwn(p,'user_id')));
  const report=info.json.reports[0];assert.equal((await call('/api/information?report='+report.id)).status,401);assert.equal((await call('/api/information?report='+report.id,null,registered.cookie)).status,403);
  const beforeCash=filled.json.account.cash,key=crypto.randomUUID();
  const purchase=await call('/api/information',{action:'subscribe',requestKey:key},registered.cookie);assert.equal(purchase.status,200,JSON.stringify(purchase.json));assert.equal(purchase.json.active,true);
- assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-500000);
- const retry=await call('/api/information',{action:'subscribe',requestKey:key},registered.cookie);assert.equal(retry.status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-500000);
+ assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-100000);
+ const retry=await call('/api/information',{action:'subscribe',requestKey:key},registered.cookie);assert.equal(retry.status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account.cash,beforeCash-100000);
  const full=await call('/api/information?report='+report.id,null,registered.cookie);assert.equal(full.status,200);assert.ok(full.json.body.sections.length>=4);assert.ok(full.json.body.sources.length);
  const source=await call('/api/article?id='+encodeURIComponent(full.json.body.sources[0].id));assert.equal(source.status,200);assert.ok(!Object.hasOwn(source.json,'impact'));assert.ok(!Object.hasOwn(source.json.details,'financialUpdate'));
  const post=await call('/api/information',{action:'post',stockId:'000001',title:'런타임에서 올린 제보',body:'원문이 있는지 확인하고 싶은 커뮤니티 글입니다.'},registered.cookie);assert.equal(post.status,200,JSON.stringify(post.json));
@@ -52,7 +52,7 @@ try{
  const loggedout=await call('/api/auth',{action:'logout'},registered.cookie);assert.equal(loggedout.status,200);assert.equal((await call('/api/game',null,registered.cookie)).json.account,null);
  const signedin=await call('/api/auth',{action:'login',login:input.login,password:input.password});assert.equal(signedin.status,200);assert.ok((await call('/api/game',null,signedin.cookie)).json.account);
  const forbidden=await call('/api/game',{action:'watch',stockId:'000001',enabled:true});assert.equal(forbidden.status,401);
- const payload=JSON.stringify(me.json);assert.ok(!payload.includes('password_hash'));assert.ok(!payload.includes('"impact"'));assert.ok(!payload.includes('"seed"'));
+ const payload=JSON.stringify(me.json);assert.ok(!payload.includes('password_hash'));assert.ok(me.json.news.every(n=>!Object.hasOwn(n,'impact')&&!Object.hasOwn(n.details,'financialUpdate')));assert.ok(!payload.includes('"seed"'));
  // The rollout reset is exercised against the real D1 runtime, without touching production.
  await db.prepare('UPDATE market SET reset_version=0 WHERE id=1').run();
  const specialBefore=Date.parse('2026-10-19T19:50:00+09:00'),heartbeat=await call('/api/heartbeat',null,'',specialBefore);

@@ -64,6 +64,13 @@
       "when": 1792487876815,
       "tag": "0008_medical_harpoon",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792571578821,
+      "tag": "0009_research_pass_price",
+      "breakpoints": true
     }
   ]
 }

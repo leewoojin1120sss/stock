@@ -12,7 +12,7 @@ import CompanyInfo from '../components/company-info';
 import Tutorial from '../components/tutorial';
 import type {TutorialView} from '../lib/tutorial';
 import InformationHub from '../components/information-hub';
-import MacroChart,{macroLabels,type MacroKey} from '../components/macro-chart';
+import MacroChart,{macroLabels,type MacroKey,type IndicatorKey} from '../components/macro-chart';
 import PortfolioDesk from '../components/portfolio-desk';
 const money=(n:number)=>Math.round(n).toLocaleString('ko-KR');
 const pct=(n:number)=>(n>0?'+':'')+n.toFixed(2)+'%';
@@ -40,7 +40,7 @@ function PriceChart({candles,positive,candle,range}:{candles:Row[];positive:bool
 export default function Home(){
  const [data,setData]=useState<GameState|null>(null),[selected,setSelected]=useState('000001'),[tab,setTab]=useState('market'),[filter,setFilter]=useState('전체'),[query,setQuery]=useState(''),[sort,setSort]=useState('code');
  const [side,setSide]=useState('buy'),[orderKind,setOrderKind]=useState('market'),[qty,setQty]=useState(''),[limit,setLimit]=useState(''),[placing,setPlacing]=useState(false),[error,setError]=useState(''),[toast,setToast]=useState(''),[now,setNow]=useState(Date.now()),[offset,setOffset]=useState(0),[range,setRange]=useState('1D'),[candle,setCandle]=useState(false),[detail,setDetail]=useState('시세'),[help,setHelp]=useState(false),[confirm,setConfirm]=useState(false),[editing,setEditing]=useState(false),[nickname,setNickname]=useState('');
- const[macro,setMacro]=useState<MacroKey|null>(null),[tutorialTarget,setTutorialTarget]=useState('');
+ const[macro,setMacro]=useState<IndicatorKey|null>(null),[tutorialTarget,setTutorialTarget]=useState('');
  const closeMacro=useCallback(()=>setMacro(null),[]);
  const[auth,setAuth]=useState<'login'|'register'|'password'|null>(null);
  const[companyInfo,setCompanyInfo]=useState(false),[infoChannel,setInfoChannel]=useState('community'),[articleRequest,setArticleRequest]=useState<{id:string;nonce:number}|undefined>(undefined);
@@ -91,7 +91,7 @@ export default function Home(){
  {error&&<div role="alert" className="error-banner">{error}<button onClick={load}>다시 연결</button></div>}
  {data?.syncing&&<div className="sync-banner"><RefreshCw size={15} className="spin"/> 지난 시세를 시간순으로 정산하고 있어요. 완료되면 주문할 수 있습니다.</div>}
  <section className="summary-grid" data-tour="summary"><article className="equity-card"><div className="card-kicker">{account?'나의 총자산':'시작 투자금'} <Wallet size={16}/></div><div className="equity-balances"><div className="equity-value">{money(total)}<span>원</span></div>{account&&<div className="equity-cash"><span>보유 현금</span><b>{money(account.cash+account.reserved)}<small>원</small></b><em>주문 가능 {money(account.cash)}원</em></div>}</div><div className="equity-footer">{account?<><span>{profit>=0?'+':''}{money(profit)}원</span><b>{pct(profit/10000000*100)}</b></>:<><span>로그인하면 나만의 계좌가 열려요</span><button onClick={()=>setAuth('login')}><ArrowUpRight size={18}/></button></>}</div></article>
- <article className="stat-card"><div className="card-kicker">부석 26 지수 <span className="tag">BSX</span></div><div className="stat-value">{index.toFixed(2)} <span className={direction(dayIndex)}>{pct(dayIndex)}</span></div><div className="stat-bottom"><span>26개 종목 동일 비중</span><Spark values={data?.index.map(i=>i.index_value)||[1000,1000]} positive={dayIndex>=0}/></div></article>
+ <button type="button" className="stat-card index-chart-trigger" onClick={()=>setMacro('index_value')} aria-label="부석 26 지수 추이 그래프 열기"><span className="card-kicker">부석 26 지수 <span className="tag">BSX</span></span><span className="stat-value">{index.toFixed(2)} <span className={direction(dayIndex)}>{pct(dayIndex)}</span></span><span className="stat-bottom"><span>26개 종목 동일 비중 · 추이 보기</span><Spark values={data?.index.map(i=>i.index_value)||[1000,1000]} positive={dayIndex>=0}/></span></button>
  <article className="stat-card"><div className="card-kicker"><TermText>시장 거래대금</TermText> <Activity size={16}/></div><div className="stat-value">{compact(data?.stocks.reduce((n,s)=>n+s.turnover,0)||0)}<em>원</em></div><div className="stat-bottom"><span>실제 참여자 주문 기준</span><span className="mini-indicator"><span className="status-dot on"/>{data?.stocks.reduce((n,s)=>n+s.volume,0).toLocaleString()||0}주</span></div></article>
  <article className="stat-card next-card"><div className="card-kicker">{data?.open?'다음 시세 갱신':'다음 장 시작'} <Clock3 size={16}/></div><div className="stat-value countdown">{data?.open?(remaining>0?countdown:'갱신 중'):clock(data?.nextTick||hours.open)}<em>{data?.open?'남음':'KST'}</em></div><div className="stat-bottom"><span><TermText>{intervalMinutes+'분 단위 단일가 체결'}</TermText></span><span className="tag">{data?.open?'AUCTION':'CLOSED'}</span></div></article></section>
  <section className="macro-ribbon" aria-label="경제 지표 추이">{(Object.keys(macroLabels) as MacroKey[]).map(key=><button key={key} onClick={()=>setMacro(key)} aria-label={macroLabels[key].name+' 추이 그래프 열기'}><span>{macroLabels[key].name}</span><b>{(data?.index.at(-1)?.[key]??{fx:1340,rate:3,oil:78,gold:2700}[key]).toLocaleString('ko-KR',{minimumFractionDigits:2,maximumFractionDigits:2})}<small>{key==='rate'?'%':key==='fx'?'원':'달러'}</small></b><Activity size={15}/></button>)}</section>
