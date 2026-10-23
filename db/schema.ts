@@ -21,3 +21,6 @@ export const researchReports = sqliteTable('research_reports',{id:text('id').pri
 export const subscriptions = sqliteTable('subscriptions',{userId:text('user_id').primaryKey().references(()=>accounts.id),expires:integer('expires').notNull(),updated:integer('updated').notNull()});
 export const researchPurchases = sqliteTable('research_purchases',{id:text('id').primaryKey(),userId:text('user_id').notNull().references(()=>accounts.id),requestKey:text('request_key').notNull(),cost:integer('cost').notNull(),created:integer('created').notNull(),expires:integer('expires').notNull()},t=>[index('research_purchase_user').on(t.userId)]);
 export const laborState = sqliteTable('labor_state',{userId:text('user_id').primaryKey().references(()=>accounts.id),taps:integer('taps').notNull().default(0),lastKey:text('last_key').notNull().default(''),updated:integer('updated').notNull().default(0)});
+
+// Historical aggregate attribution only; never a source of future market signals.
+export const marketDiagnostics=sqliteTable('market_diagnostics',{ts:integer('ts').primaryKey(),model:text('model').notNull(),details:text('details').notNull()});

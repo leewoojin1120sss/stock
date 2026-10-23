@@ -9,7 +9,7 @@ export async function resetGameIfNeeded(db:D1Database,now:number){
  if(!market||market.reset_version>=RESET_VERSION)return false;
  const guard='(SELECT reset_version FROM market WHERE id=1)<'+RESET_VERSION,anchor=Math.floor(now/STEP)*STEP,stocks=seedStocks();
  const commands:D1PreparedStatement[]=[];
- for(const table of ['fills','orders','holdings','watchlist','cash_events','labor_state','subscriptions','research_purchases','community_posts','research_reports','candles','news','ticks','stocks'])commands.push(db.prepare('DELETE FROM '+table+' WHERE '+guard));
+ for(const table of ['fills','orders','holdings','watchlist','cash_events','labor_state','subscriptions','research_purchases','community_posts','research_reports','market_diagnostics','candles','news','ticks','stocks'])commands.push(db.prepare('DELETE FROM '+table+' WHERE '+guard));
  commands.push(db.prepare('UPDATE accounts SET cash=?,reserved=0,realized=0,tutorial_done=0 WHERE '+guard).bind(INITIAL_CASH));
  const put=(table:string,row:Row)=>{const columns=Object.keys(row);return db.prepare('INSERT INTO '+table+'('+columns.join(',')+') SELECT '+columns.map(()=>'?').join(',')+' WHERE '+guard).bind(...Object.values(row));};
  for(const stock of stocks){commands.push(put('stocks',stock),put('candles',{stock_id:stock.id,ts:anchor,open:stock.price,high:stock.price,low:stock.price,close:stock.price,volume:0}));}

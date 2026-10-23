@@ -14,7 +14,7 @@ test('persistent regimes alternate, retain a positive long-run drift and rotate 
  assert.equal(marketCycle(CYCLE_MODEL_START-1,'cycle-test',stocks),null);
  let drift=0;const phases=new Set();
  for(let day=0;day<56;day++){const at=start+day*DAY,cycle=marketCycle(at,'cycle-test',stocks);phases.add(cycle.phase);drift+=cycle.dailyDrift;assert.ok(cycle.from<=at&&at<cycle.to);assert.ok(cycle.to-cycle.from>=2*DAY);assert.ok(Math.abs(Object.values(cycle.signals).reduce((a,b)=>a+b,0))<1e-10);assert.ok(Object.values(cycle.signals).some(n=>n>0));assert.ok(Object.values(cycle.signals).some(n=>n<0));assert.deepEqual(marketCycle(at+300000,'cycle-test',stocks).signals,cycle.signals);}
- assert.equal(phases.size,3);assert.ok(drift/56>.0005&&drift/56<.003);
+ assert.equal(phases.size,3);assert.ok(drift/56>.0001&&drift/56<.001);
  const before=marketCycle(start,'cycle-test',stocks),changed=stocks.map(s=>s.id==='000001'?{...s,eps:s.eps*1.5}:s),after=marketCycle(start,'cycle-test',changed);assert.ok(after.signals['000001']>before.signals['000001']);
 });
 test('industrial events release every few days, expire and never appear before their release',()=>{

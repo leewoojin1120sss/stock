@@ -78,6 +78,13 @@
       "when": 1792573448045,
       "tag": "0010_linked_fundamentals",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1792763184375,
+      "tag": "0011_market_balance_diagnostics",
+      "breakpoints": true
     }
   ]
 }

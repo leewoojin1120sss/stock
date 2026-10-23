@@ -31,7 +31,8 @@ export function marketCycle(ts:number,secret:string,stocks:Stock[]):MarketCycle|
  const order=arrangements[cycle===0?0:Math.floor(draw(secret,'order:'+cycle)*3)];let phase=order[0],offset=0;
  for(const candidate of order){phase=candidate;if(position<offset+lengths[phase])break;offset+=lengths[phase];}
  const from=Math.max(CYCLE_MODEL_START,session(epoch+(cycle*14+offset)*DAY).open),to=session(epoch+(cycle*14+offset+lengths[phase])*DAY).open;
- const drift={expansion:.0032,correction:-.0038,rotation:-.0002}[phase]+.0012;
+ // A mild long-run tendency with genuine negative-drift correction periods.
+ const drift={expansion:.0020,correction:-.0022,rotation:.0004}[phase];
  const equities=stocks.filter(s=>s.kind==='stock'&&s.active!==0),rotation=Math.floor(day/4),companyPeriod=Math.floor(day/7),signals:Record<string,number>={};
  for(const s of equities){const base=profiles.find(p=>p.id===s.id),quality=base?Math.tanh((s.eps-base.eps)/Math.max(1,Math.abs(base.eps)))*.002:0;signals[s.id]=(draw(secret,'sector:'+rotation+':'+s.sector)-.5)*.008+(draw(secret,'company:'+companyPeriod+':'+s.id)-.5)*.005+quality;}
  const mean=equities.reduce((n,s)=>n+signals[s.id],0)/Math.max(1,equities.length);for(const s of equities)signals[s.id]-=mean;

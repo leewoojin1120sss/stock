@@ -103,3 +103,14 @@ node tests/runtime-smoke.mjs
 - Earnings quality, valuation and relative debt stress add only a small bounded, cross-sectionally centered price influence. Market-wide secular drift and alternating market regimes remain unchanged; cheap shares are not guaranteed to rise.
 - This is an aggregate accounting model, not full audited statements: it does not model issuance, corporate cash ledgers, loan maturities, loan-by-loan repricing or insolvency proceedings. Equity has a minimal numerical floor. Financial assumptions are company/sector parameters, not estimates of real listed businesses.
 - Accounting definitions checked against [SEC financial statements guide](https://www.sec.gov/about/reports-publications/investorpubsbegfinstmtguide) and [Investor.gov EPS](https://www.investor.gov/introduction-investing/investing-basics/glossary/earnings-share).
+
+
+### Market balance v2 (2026-10-23)
+
+The market-wide random shock was dominating the intended gradual market tendency. Common log-noise amplitude is now 0.0028 (previously 0.008), sector 0.008 (0.013), and company 0.015 (0.023), each scaled by the square root of auction duration. Jump probability is 0.015 per original 10-minute interval and size 0.045 times beta. All draws remain symmetric, with both positive and negative outcomes.
+
+Expansion/correction/rotation daily log tendencies are +0.20% / -0.22% / +0.04%. Existing phase lengths, secret-dependent ordering, industrial events, news surprise effects, financial sensitivity and real user order flow are retained. There is no target index, minimum index, forced rebound or unconditional price increase. Live deployment changes future unprocessed ticks, preserving prior prices, holdings and records.
+
+Historical aggregate `market_diagnostics` rows are committed in the same transaction as each tick and retained for 90 days. They reconcile index changes into market/sector/company randomness, jumps, orders, news, macro, cycle, fundamentals, dividend and other execution effects. Factor attribution allocates the exponential move proportionally to its log inputs; `other` includes tick-size rounding and daily limits. The table stores no RNG seed or future scenario. It is not exposed in the public API.
+
+Controlled check: the public 2026-10-23 22:25 KST stock snapshot (index 899.4052), no user orders, 32 independent seeds `independent-diagnostic-20261023-v2-{0..31}`, 90 sessions with the actual engine, news, macro, financial updates and dividends. Compared with v17, median maximum drawdown fell from 13.61% to 7.65%, worst drawdown 23.59% to 12.96%, and median terminal return +51.57% to +20.42%. Median fraction of down days rose from 40.56% to 43.33%; 27/32 paths gained by day 28 and 32/32 by day 90. These bounded samples do not establish a guaranteed return or maximum loss.
